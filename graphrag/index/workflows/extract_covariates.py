@@ -51,7 +51,8 @@ async def run_workflow(
             "claim",
             extraction_strategy,
             async_mode=async_mode,
-            entity_types=None,
+            document_type=config.extract_claims.document_type,
+            entity_specification=None,
             num_threads=num_threads,
         )
 
@@ -68,7 +69,8 @@ async def extract_covariates(
     covariate_type: str,
     extraction_strategy: dict[str, Any] | None,
     async_mode: AsyncType = AsyncType.AsyncIO,
-    entity_types: list[str] | None = None,
+    document_type: str | None = None,
+    entity_specification: str | None = None,
     num_threads: int = 4,
 ) -> pd.DataFrame:
     """All the steps to extract and format covariates."""
@@ -83,7 +85,8 @@ async def extract_covariates(
         covariate_type=covariate_type,
         strategy=extraction_strategy,
         async_mode=async_mode,
-        entity_types=entity_types,
+        document_type=document_type,
+        entity_specification=entity_specification,
         num_threads=num_threads,
     )
     text_units.drop(columns=["text_unit_id"], inplace=True)  # don't pollute the global

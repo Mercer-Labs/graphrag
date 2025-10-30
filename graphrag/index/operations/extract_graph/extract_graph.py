@@ -20,8 +20,7 @@ from graphrag.index.utils.derive_from_rows import derive_from_rows
 
 logger = logging.getLogger(__name__)
 
-
-DEFAULT_ENTITY_TYPES = ["organization", "person", "geo", "event"]
+DEFAULT_DOCUMENT_TYPE = "DOCUMENT"
 
 
 async def extract_graph(
@@ -32,13 +31,11 @@ async def extract_graph(
     id_column: str,
     strategy: dict[str, Any] | None,
     async_mode: AsyncType = AsyncType.AsyncIO,
-    entity_types=DEFAULT_ENTITY_TYPES,
+    document_type: str | None = None,
     num_threads: int = 4,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Extract a graph from a piece of text using a language model."""
     logger.debug("entity_extract strategy=%s", strategy)
-    if entity_types is None:
-        entity_types = DEFAULT_ENTITY_TYPES
     strategy = strategy or {}
     strategy_exec = _load_strategy(
         strategy.get("type", ExtractEntityStrategyType.graph_intelligence)
@@ -53,7 +50,7 @@ async def extract_graph(
         id = row[id_column]
         result = await strategy_exec(
             [Document(text=text, id=id)],
-            entity_types,
+            document_type or DEFAULT_DOCUMENT_TYPE,
             cache,
             strategy_config,
         )

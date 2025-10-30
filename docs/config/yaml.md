@@ -214,7 +214,7 @@ Tune the language model-based graph extraction process.
 
 - `model_id` **str** - Name of the model definition to use for API calls.
 - `prompt` **str** - The prompt file to use.
-- `entity_types` **list[str]** - The entity types to identify.
+- `document_type` **str** - The type of document being processed
 - `max_gleanings` **int** - The maximum number of gleaning cycles to use.
 
 ### summarize_descriptions

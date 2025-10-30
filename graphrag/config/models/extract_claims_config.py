@@ -30,8 +30,12 @@ class ClaimExtractionConfig(BaseModel):
         description="The claim description to use.",
         default=graphrag_config_defaults.extract_claims.description,
     )
+    document_type: str = Field(
+        description="The type of document being processed.",
+        default=graphrag_config_defaults.extract_claims.document_type,
+    )
     max_gleanings: int = Field(
-        description="The maximum number of entity gleanings to use.",
+        description="The maximum number of claim gleanings to use.",
         default=graphrag_config_defaults.extract_claims.max_gleanings,
     )
     strategy: dict | None = Field(

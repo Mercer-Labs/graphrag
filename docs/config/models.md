@@ -70,7 +70,6 @@ models:
 extract_graph:
   model_id: extraction_chat_model
   prompt: "prompts/extract_graph.txt"
-  entity_types: [organization,person,geo,event]
   max_gleanings: 1
 
 ...
@@ -123,7 +122,6 @@ models:
 extract_graph:
   model_id: default_chat_model
   prompt: "prompts/extract_graph.txt"
-  entity_types: [organization,person,geo,event]
   max_gleanings: 1
 ```
 

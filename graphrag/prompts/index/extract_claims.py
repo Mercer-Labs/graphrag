@@ -3,12 +3,13 @@
 
 """A file containing prompts definition."""
 
+# TODO SUBU this may require refinement: Claims aren't meant for us - could these be finding attributes for entities?
 EXTRACT_CLAIMS_PROMPT = """
 -Target activity-
 You are an intelligent assistant that helps a human analyst to analyze claims against certain entities presented in a text document.
 
 -Goal-
-Given a text document that is potentially relevant to this activity, an entity specification, and a claim description, extract all entities that match the entity specification and all claims against those entities.
+Given a text document of type {document_type}, an entity specification, and a claim description, extract all entities that match the entity specification and all claims against those entities.
 
 -Steps-
 1. Extract all named entities that match the predefined entity specification. Entity specification can either be a list of entity names or a list of entity types.
@@ -30,6 +31,7 @@ Format each claim as (<subject_entity>{tuple_delimiter}<object_entity>{tuple_del
 
 -Examples-
 Example 1:
+Document type: NEWS
 Entity specification: organization
 Claim description: red flags associated with an entity
 Text: According to an article on 2022/01/10, Company A was fined for bid rigging while participating in multiple public tenders published by Government Agency B. The company is owned by Person C who was suspected of engaging in corruption activities in 2015.
@@ -39,6 +41,7 @@ Output:
 {completion_delimiter}
 
 Example 2:
+Document type: NEWS
 Entity specification: Company A, Person C
 Claim description: red flags associated with an entity
 Text: According to an article on 2022/01/10, Company A was fined for bid rigging while participating in multiple public tenders published by Government Agency B. The company is owned by Person C who was suspected of engaging in corruption activities in 2015.
@@ -51,11 +54,12 @@ Output:
 
 -Real Data-
 Use the following input for your answer.
+Document type: {document_type}
 Entity specification: {entity_specs}
 Claim description: {claim_description}
 Text: {input_text}
 Output:"""
 
 
-CONTINUE_PROMPT = "MANY entities were missed in the last extraction.  Add them below using the same format:\n"
-LOOP_PROMPT = "It appears some entities may have still been missed. Answer Y if there are still entities that need to be added, or N if there are none. Please answer with a single letter Y or N.\n"
+CONTINUE_PROMPT = "MANY claims were missed in the last extraction.  Add them below using the same format:\n"
+LOOP_PROMPT = "It appears some claims may have still been missed. Answer Y if there are still claims that need to be added, or N if there are none. Please answer with a single letter Y or N.\n"

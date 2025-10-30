@@ -26,7 +26,8 @@ from graphrag.language_model.manager import ModelManager
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_ENTITY_TYPES = ["organization", "person", "geo", "event"]
+DEFAULT_ENTITY_SPECIFICATION = "generic entity"
+DEFAULT_DOCUMENT_TYPE = "DOCUMENT"
 
 
 async def extract_covariates(
@@ -37,14 +38,16 @@ async def extract_covariates(
     covariate_type: str,
     strategy: dict[str, Any] | None,
     async_mode: AsyncType = AsyncType.AsyncIO,
-    entity_types: list[str] | None = None,
+    document_type: str | None = None,
+    entity_specification: str | None = None,
     num_threads: int = 4,
 ):
     """Extract claims from a piece of text."""
     logger.debug("extract_covariates strategy=%s", strategy)
-    if entity_types is None:
-        entity_types = DEFAULT_ENTITY_TYPES
-
+    if entity_specification is None:
+        entity_specification = DEFAULT_ENTITY_SPECIFICATION
+    if document_type is None:
+        document_type = DEFAULT_DOCUMENT_TYPE
     resolved_entities_map = {}
 
     strategy = strategy or {}
@@ -54,7 +57,8 @@ async def extract_covariates(
         text = row[column]
         result = await run_extract_claims(
             input=text,
-            entity_types=entity_types,
+            document_type=document_type,
+            entity_specification=entity_specification,
             resolved_entities_map=resolved_entities_map,
             callbacks=callbacks,
             cache=cache,
@@ -83,7 +87,8 @@ def create_row_from_claim_data(row, covariate_data: Covariate, covariate_type: s
 
 async def run_extract_claims(
     input: str | Iterable[str],
-    entity_types: list[str],
+    document_type: str,
+    entity_specification: str,
     resolved_entities_map: dict[str, str],
     callbacks: WorkflowCallbacks,
     cache: PipelineCache,
@@ -125,7 +130,8 @@ async def run_extract_claims(
 
     results = await extractor({
         "input_text": input,
-        "entity_specs": entity_types,
+        "document_type": document_type,
+        "entity_specs": entity_specification,
         "resolved_entities": resolved_entities_map,
         "claim_description": claim_description,
         "tuple_delimiter": tuple_delimiter,

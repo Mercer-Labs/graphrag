@@ -15,7 +15,7 @@ class TestRunChain(unittest.IsolatedAsyncioTestCase):
     async def test_run_extract_graph_single_document_correct_entities_returned(self):
         results = await run_extract_graph(
             docs=[Document("test_text", "1")],
-            entity_types=["person"],
+            document_type="NEWS",
             args={
                 "max_gleanings": 0,
                 "summarize_descriptions": False,
@@ -49,7 +49,7 @@ class TestRunChain(unittest.IsolatedAsyncioTestCase):
     ):
         results = await run_extract_graph(
             docs=[Document("text_1", "1"), Document("text_2", "2")],
-            entity_types=["person"],
+            document_type="NEWS",
             args={
                 "max_gleanings": 0,
                 "summarize_descriptions": False,
@@ -85,7 +85,7 @@ class TestRunChain(unittest.IsolatedAsyncioTestCase):
     async def test_run_extract_graph_multiple_documents_correct_edges_returned(self):
         results = await run_extract_graph(
             docs=[Document("text_1", "1"), Document("text_2", "2")],
-            entity_types=["person"],
+            document_type="NEWS",
             args={
                 "max_gleanings": 0,
                 "summarize_descriptions": False,
@@ -129,7 +129,7 @@ class TestRunChain(unittest.IsolatedAsyncioTestCase):
     ):
         results = await run_extract_graph(
             docs=[Document("text_1", "1"), Document("text_2", "2")],
-            entity_types=["person"],
+            document_type="NEWS",
             args={
                 "max_gleanings": 0,
                 "summarize_descriptions": False,
@@ -178,7 +178,7 @@ class TestRunChain(unittest.IsolatedAsyncioTestCase):
     ):
         results = await run_extract_graph(
             docs=[Document("text_1", "1"), Document("text_2", "2")],
-            entity_types=["person"],
+            document_type="NEWS",
             args={
                 "max_gleanings": 0,
                 "summarize_descriptions": False,

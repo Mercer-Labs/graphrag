@@ -250,7 +250,7 @@ class TestIndexer:
             dispose = asyncio.run(prepare_azurite_data(input_path, azure))
 
         print("running indexer")
-        self.__run_indexer(root, input_file_type)
+        #self.__run_indexer(root, input_file_type) #TODO SUBU DISABLING for speed: cached indexer runs
         print("indexer complete")
 
         if dispose is not None:

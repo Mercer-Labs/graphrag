@@ -38,7 +38,7 @@ class EntityExtractionResult:
 EntityExtractStrategy = Callable[
     [
         list[Document],
-        EntityTypes,
+        str,
         PipelineCache,
         StrategyConfig,
     ],

@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 async def run_graph_intelligence(
     docs: list[Document],
-    entity_types: EntityTypes,
+    document_type: str,
     cache: PipelineCache,
     args: StrategyConfig,
 ) -> EntityExtractionResult:
@@ -39,13 +39,13 @@ async def run_graph_intelligence(
         cache=cache,
     )
 
-    return await run_extract_graph(llm, docs, entity_types, args)
+    return await run_extract_graph(llm, docs, document_type, args)
 
 
 async def run_extract_graph(
     model: ChatModel,
     docs: list[Document],
-    entity_types: EntityTypes,
+    document_type: str,
     args: StrategyConfig,
 ) -> EntityExtractionResult:
     """Run the entity extraction chain."""
@@ -70,7 +70,7 @@ async def run_extract_graph(
     results = await extractor(
         list(text_list),
         {
-            "entity_types": entity_types,
+            "document_type": document_type,
             "tuple_delimiter": tuple_delimiter,
             "record_delimiter": record_delimiter,
             "completion_delimiter": completion_delimiter,

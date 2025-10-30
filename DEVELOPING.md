@@ -20,11 +20,6 @@ uv sync
 uv run poe index <...args>
 ```
 
-## Execute prompt tuning
-```shell
-uv run poe prompt_tune <...args>
-```
-
 ## Execute Queries
 ```shell
 uv run poe query <...args>
@@ -48,7 +43,6 @@ graphrag
 ├── logger          # logger module supporting several options
 │    └─ factory.py  #  └─ main entrypoint to create a logger
 ├── model           # data model definitions associated with the knowledge graph
-├── prompt_tune     # prompt tuning module 
 ├── prompts         # a collection of all the system prompts used by graphrag
 ├── query           # query engine
 ├── storage         # storage module supporting several options

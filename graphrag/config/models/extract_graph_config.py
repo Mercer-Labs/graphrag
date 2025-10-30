@@ -22,9 +22,9 @@ class ExtractGraphConfig(BaseModel):
         description="The entity extraction prompt to use.",
         default=graphrag_config_defaults.extract_graph.prompt,
     )
-    entity_types: list[str] = Field(
-        description="The entity extraction entity types to use.",
-        default=graphrag_config_defaults.extract_graph.entity_types,
+    document_type: str = Field(
+        description="The type of document being processed.",
+        default=graphrag_config_defaults.extract_graph.document_type,
     )
     max_gleanings: int = Field(
         description="The maximum number of entity gleanings to use.",

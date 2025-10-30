@@ -194,6 +194,7 @@ class ExtractClaimsDefaults:
     description: str = (
         "Any claims or facts that could be relevant to information discovery."
     )
+    document_type: str = "DOCUMENT"
     max_gleanings: int = 1
     strategy: None = None
     model_id: str = DEFAULT_CHAT_MODEL_ID
@@ -204,9 +205,7 @@ class ExtractGraphDefaults:
     """Default values for extracting graph."""
 
     prompt: None = None
-    entity_types: list[str] = field(
-        default_factory=lambda: ["organization", "person", "geo", "event"]
-    )
+    document_type: str = "DOCUMENT"
     max_gleanings: int = 1
     strategy: None = None
     model_id: str = DEFAULT_CHAT_MODEL_ID

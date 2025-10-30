@@ -92,7 +92,7 @@ embed_text:
 extract_graph:
   model_id: {graphrag_config_defaults.extract_graph.model_id}
   prompt: "prompts/extract_graph.txt"
-  entity_types: [{",".join(graphrag_config_defaults.extract_graph.entity_types)}]
+  document_type: {graphrag_config_defaults.extract_graph.document_type}
   max_gleanings: {graphrag_config_defaults.extract_graph.max_gleanings}
 
 summarize_descriptions:

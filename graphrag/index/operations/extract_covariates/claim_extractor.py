@@ -39,6 +39,7 @@ class ClaimExtractor:
     _summary_prompt: str
     _output_formatter_prompt: str
     _input_text_key: str
+    _input_document_type_key: str
     _input_entity_spec_key: str
     _input_claim_description_key: str
     _tuple_delimiter_key: str
@@ -52,6 +53,7 @@ class ClaimExtractor:
         model_invoker: ChatModel,
         extraction_prompt: str | None = None,
         input_text_key: str | None = None,
+        input_document_type_key: str | None = None,
         input_entity_spec_key: str | None = None,
         input_claim_description_key: str | None = None,
         input_resolved_entities_key: str | None = None,
@@ -65,6 +67,7 @@ class ClaimExtractor:
         self._model = model_invoker
         self._extraction_prompt = extraction_prompt or EXTRACT_CLAIMS_PROMPT
         self._input_text_key = input_text_key or "input_text"
+        self._input_document_type_key = input_document_type_key or "document_type"
         self._input_entity_spec_key = input_entity_spec_key or "entity_specs"
         self._tuple_delimiter_key = tuple_delimiter_key or "tuple_delimiter"
         self._record_delimiter_key = record_delimiter_key or "record_delimiter"
@@ -91,12 +94,14 @@ class ClaimExtractor:
         if prompt_variables is None:
             prompt_variables = {}
         texts = inputs[self._input_text_key]
+        document_type = inputs[self._input_document_type_key]
         entity_spec = str(inputs[self._input_entity_spec_key])
         claim_description = inputs[self._input_claim_description_key]
         resolved_entities = inputs.get(self._input_resolved_entities_key, {})
         source_doc_map = {}
 
         prompt_args = {
+            self._input_document_type_key: document_type,
             self._input_entity_spec_key: entity_spec,
             self._input_claim_description_key: claim_description,
             self._tuple_delimiter_key: prompt_variables.get(self._tuple_delimiter_key)

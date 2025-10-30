@@ -228,7 +228,7 @@ def assert_extract_graph_configs(
     actual: ExtractGraphConfig, expected: ExtractGraphConfig
 ) -> None:
     assert actual.prompt == expected.prompt
-    assert actual.entity_types == expected.entity_types
+    assert actual.document_type == expected.document_type
     assert actual.max_gleanings == expected.max_gleanings
     assert actual.strategy == expected.strategy
     assert actual.model_id == expected.model_id

@@ -49,11 +49,6 @@ At query time, these structures are used to provide materials for the LLM contex
 - [_DRIFT Search_](query/drift_search.md) for reasoning about specific entities by fanning-out to their neighbors and associated concepts, but with the added context of community information.
 - _Basic Search_ for those times when your query is best answered by baseline RAG (standard top _k_ vector search).
 
-### Prompt Tuning
-
-Using _GraphRAG_ with your data out of the box may not yield the best possible results.
-We strongly recommend to fine-tune your prompts following the [Prompt Tuning Guide](prompt_tuning/overview.md) in our documentation.
-
 
 ## Versioning
 

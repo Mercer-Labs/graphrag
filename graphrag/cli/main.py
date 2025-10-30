@@ -12,8 +12,6 @@ import typer
 
 from graphrag.config.defaults import graphrag_config_defaults
 from graphrag.config.enums import IndexingMethod, SearchMethod
-from graphrag.prompt_tune.defaults import LIMIT, MAX_TOKEN_COUNT, N_SUBSET_MAX, K
-from graphrag.prompt_tune.types import DocSelectionType
 
 INVALID_METHOD_ERROR = "Invalid method"
 
@@ -284,131 +282,7 @@ def _update_cli(
         method=method,
     )
 
-
-@app.command("prompt-tune")
-def _prompt_tune_cli(
-    root: Path = typer.Option(
-        Path(),
-        "--root",
-        "-r",
-        help="The project root directory.",
-        exists=True,
-        dir_okay=True,
-        writable=True,
-        resolve_path=True,
-        autocompletion=ROOT_AUTOCOMPLETE,
-    ),
-    config: Path | None = typer.Option(
-        None,
-        "--config",
-        "-c",
-        help="The configuration to use.",
-        exists=True,
-        file_okay=True,
-        readable=True,
-        autocompletion=CONFIG_AUTOCOMPLETE,
-    ),
-    verbose: bool = typer.Option(
-        False,
-        "--verbose",
-        "-v",
-        help="Run the prompt tuning pipeline with verbose logging.",
-    ),
-    domain: str | None = typer.Option(
-        None,
-        "--domain",
-        help=(
-            "The domain your input data is related to. "
-            "For example 'space science', 'microbiology', 'environmental news'. "
-            "If not defined, a domain will be inferred from the input data."
-        ),
-    ),
-    selection_method: DocSelectionType = typer.Option(
-        DocSelectionType.RANDOM.value,
-        "--selection-method",
-        help="The text chunk selection method.",
-    ),
-    n_subset_max: int = typer.Option(
-        N_SUBSET_MAX,
-        "--n-subset-max",
-        help="The number of text chunks to embed when --selection-method=auto.",
-    ),
-    k: int = typer.Option(
-        K,
-        "--k",
-        help="The maximum number of documents to select from each centroid when --selection-method=auto.",
-    ),
-    limit: int = typer.Option(
-        LIMIT,
-        "--limit",
-        help="The number of documents to load when --selection-method={random,top}.",
-    ),
-    max_tokens: int = typer.Option(
-        MAX_TOKEN_COUNT,
-        "--max-tokens",
-        help="The max token count for prompt generation.",
-    ),
-    min_examples_required: int = typer.Option(
-        2,
-        "--min-examples-required",
-        help="The minimum number of examples to generate/include in the entity extraction prompt.",
-    ),
-    chunk_size: int = typer.Option(
-        graphrag_config_defaults.chunks.size,
-        "--chunk-size",
-        help="The size of each example text chunk. Overrides chunks.size in the configuration file.",
-    ),
-    overlap: int = typer.Option(
-        graphrag_config_defaults.chunks.overlap,
-        "--overlap",
-        help="The overlap size for chunking documents. Overrides chunks.overlap in the configuration file.",
-    ),
-    language: str | None = typer.Option(
-        None,
-        "--language",
-        help="The primary language used for inputs and outputs in graphrag prompts.",
-    ),
-    discover_entity_types: bool = typer.Option(
-        True,
-        "--discover-entity-types/--no-discover-entity-types",
-        help="Discover and extract unspecified entity types.",
-    ),
-    output: Path = typer.Option(
-        Path("prompts"),
-        "--output",
-        "-o",
-        help="The directory to save prompts to, relative to the project root directory.",
-        dir_okay=True,
-        writable=True,
-        resolve_path=True,
-    ),
-) -> None:
-    """Generate custom graphrag prompts with your own data (i.e. auto templating)."""
-    import asyncio
-
-    from graphrag.cli.prompt_tune import prompt_tune
-
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(
-        prompt_tune(
-            root=root,
-            config=config,
-            domain=domain,
-            verbose=verbose,
-            selection_method=selection_method,
-            limit=limit,
-            max_tokens=max_tokens,
-            chunk_size=chunk_size,
-            overlap=overlap,
-            language=language,
-            discover_entity_types=discover_entity_types,
-            output=output,
-            n_subset_max=n_subset_max,
-            k=k,
-            min_examples_required=min_examples_required,
-        )
-    )
-
+# NOTE dropped prompt-tune command - bring it back if needed from graphrag/cli/prompt_tune.py
 
 @app.command("query")
 def _query_cli(

@@ -25,7 +25,7 @@ from graphrag.prompts.index.extract_graph import (
 DEFAULT_TUPLE_DELIMITER = "<|>"
 DEFAULT_RECORD_DELIMITER = "##"
 DEFAULT_COMPLETION_DELIMITER = "<|COMPLETE|>"
-DEFAULT_ENTITY_TYPES = ["organization", "person", "geo", "event"]
+DEFAULT_DOCUMENT_TYPE = "DOCUMENT"
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class GraphExtractor:
     _join_descriptions: bool
     _tuple_delimiter_key: str
     _record_delimiter_key: str
-    _entity_types_key: str
+    _document_type_key: str
     _input_text_key: str
     _completion_delimiter_key: str
     _entity_name_key: str
@@ -61,7 +61,7 @@ class GraphExtractor:
         tuple_delimiter_key: str | None = None,
         record_delimiter_key: str | None = None,
         input_text_key: str | None = None,
-        entity_types_key: str | None = None,
+        document_type_key: str | None = None,
         completion_delimiter_key: str | None = None,
         prompt: str | None = None,
         join_descriptions=True,
@@ -78,7 +78,7 @@ class GraphExtractor:
         self._completion_delimiter_key = (
             completion_delimiter_key or "completion_delimiter"
         )
-        self._entity_types_key = entity_types_key or "entity_types"
+        self._document_type_key = document_type_key or "document_type"
         self._extraction_prompt = prompt or GRAPH_EXTRACTION_PROMPT
         self._max_gleanings = (
             max_gleanings
@@ -107,9 +107,8 @@ class GraphExtractor:
                 self._completion_delimiter_key
             )
             or DEFAULT_COMPLETION_DELIMITER,
-            self._entity_types_key: ",".join(
-                prompt_variables[self._entity_types_key] or DEFAULT_ENTITY_TYPES
-            ),
+            self._document_type_key: prompt_variables.get(self._document_type_key)
+            or DEFAULT_DOCUMENT_TYPE,
         }
 
         for doc_index, text in enumerate(texts):

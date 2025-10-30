@@ -289,9 +289,7 @@ class GraphRagConfig(BaseModel):
 
     extract_claims: ClaimExtractionConfig = Field(
         description="The claim extraction configuration to use.",
-        default=ClaimExtractionConfig(
-            enabled=graphrag_config_defaults.extract_claims.enabled,
-        ),
+        default=ClaimExtractionConfig(),
     )
     """The claim extraction configuration to use."""
 

@@ -54,7 +54,7 @@ async def run_workflow(
         extraction_strategy=extraction_strategy,
         extraction_num_threads=extract_graph_llm_settings.concurrent_requests,
         extraction_async_mode=extract_graph_llm_settings.async_mode,
-        entity_types=config.extract_graph.entity_types,
+        document_type=config.extract_graph.document_type,
         summarization_strategy=summarization_strategy,
         summarization_num_threads=summarization_llm_settings.concurrent_requests,
     )
@@ -86,7 +86,7 @@ async def extract_graph(
     extraction_strategy: dict[str, Any] | None = None,
     extraction_num_threads: int = 4,
     extraction_async_mode: AsyncType = AsyncType.AsyncIO,
-    entity_types: list[str] | None = None,
+    document_type: str | None = None,
     summarization_strategy: dict[str, Any] | None = None,
     summarization_num_threads: int = 4,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -100,7 +100,7 @@ async def extract_graph(
         id_column="id",
         strategy=extraction_strategy,
         async_mode=extraction_async_mode,
-        entity_types=entity_types,
+        document_type=document_type,
         num_threads=extraction_num_threads,
     )
 

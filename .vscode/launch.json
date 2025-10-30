@@ -28,17 +28,6 @@
 			]
 		},
 		{
-			"name": "Prompt Tuning",
-			"type": "debugpy",
-			"request": "launch",
-			"module": "uv",
-			"args": [
-				"poe", "prompt-tune",
-				"--config",
-				"<path_to_ragtest_root_demo>/settings.yaml",
-			]
-		},
-		{
 			"name": "Debug Integration Pytest",
 			"type": "debugpy",
 			"request": "launch",
