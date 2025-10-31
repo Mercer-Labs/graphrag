@@ -224,8 +224,10 @@ class TestIndexer:
             **os.environ,
             "BLOB_STORAGE_CONNECTION_STRING": WELL_KNOWN_AZURITE_CONNECTION_STRING,
             "LOCAL_BLOB_STORAGE_CONNECTION_STRING": WELL_KNOWN_AZURITE_CONNECTION_STRING,
-            "AZURE_AI_SEARCH_URL_ENDPOINT": os.getenv("AZURE_AI_SEARCH_URL_ENDPOINT"),
-            "AZURE_AI_SEARCH_API_KEY": os.getenv("AZURE_AI_SEARCH_API_KEY"),
+            "AZURE_AI_SEARCH_URL_ENDPOINT": os.getenv("AZURE_AI_SEARCH_URL_ENDPOINT") or "",
+            "AZURE_AI_SEARCH_API_KEY": os.getenv("AZURE_AI_SEARCH_API_KEY") or "",
+            "GRAPHRAG_API_KEY": os.getenv("GRAPHRAG_API_KEY") or "",
+            "GRAPHRAG_API_BASE": os.getenv("GRAPHRAG_API_BASE") or "",
         },
         clear=True,
     )

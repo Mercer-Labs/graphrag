@@ -71,6 +71,7 @@
 				"./tests/smoke",
 				"-k", "test_fixtures"
 			],
+			"envFile": "${workspaceFolder}/.env",
 			"console": "integratedTerminal",
     		"justMyCode": false 
 		},
