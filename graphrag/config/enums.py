@@ -145,6 +145,8 @@ class IndexingMethod(str, Enum):
 
     Standard = "standard"
     """Traditional GraphRAG indexing, with all graph construction and summarization performed by a language model."""
+    MinimalGraph = "minimal-graph"
+    """Minimal graph indexing, with only the graph construction performed by a language model."""
     Fast = "fast"
     """Fast indexing, using NLP for graph construction and language model for summarization."""
     StandardUpdate = "standard-update"

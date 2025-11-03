@@ -56,7 +56,7 @@ async def run_workflow(
     logger.info("Workflow completed: finalize_graph")
     return WorkflowFunctionOutput(
         result={
-            "entities": entities,
+            "entities": entities,   
             "relationships": relationships,
         }
     )

@@ -60,6 +60,14 @@ _standard_workflows = [
     "create_community_reports",
     "generate_text_embeddings",
 ]
+_minimal_graph_workflows = [
+    "create_base_text_units",
+    "create_final_documents",
+    "extract_graph",
+    "finalize_graph",
+    "extract_covariates",
+    "create_final_text_units",
+]
 _fast_workflows = [
     "create_base_text_units",
     "create_final_documents",
@@ -83,6 +91,9 @@ _update_workflows = [
 ]
 PipelineFactory.register_pipeline(
     IndexingMethod.Standard, ["load_input_documents", *_standard_workflows]
+)
+PipelineFactory.register_pipeline(
+    IndexingMethod.MinimalGraph, ["load_input_documents", *_minimal_graph_workflows]
 )
 PipelineFactory.register_pipeline(
     IndexingMethod.Fast, ["load_input_documents", *_fast_workflows]
