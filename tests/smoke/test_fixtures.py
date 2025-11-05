@@ -14,6 +14,7 @@ from unittest import mock
 
 import pandas as pd
 import pytest
+from regex import F
 
 from graphrag.query.context_builder.community_context import (
     NO_COMMUNITY_RECORDS_WARNING,
@@ -142,7 +143,7 @@ class TestIndexer:
         ]
         command = [arg for arg in command if arg]
         logger.info("running command ", " ".join(command))
-        completion = subprocess.run(command, env=os.environ)
+        completion = subprocess.run(command, env=os.environ, shell=False)
         assert completion.returncode == 0, (
             f"Indexer failed with return code: {completion.returncode}"
         )
@@ -250,7 +251,7 @@ class TestIndexer:
             dispose = asyncio.run(prepare_azurite_data(input_path, azure))
 
         print("running indexer")
-        #self.__run_indexer(root, input_file_type) #TODO SUBU DISABLING for speed: cached indexer runs
+        self.__run_indexer(root, input_file_type)
         print("indexer complete")
 
         if dispose is not None:

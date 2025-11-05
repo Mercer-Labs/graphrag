@@ -64,5 +64,14 @@
 			"console": "integratedTerminal",
     		"justMyCode": false 
 		},
+		{
+			"name": "Python attach to CLI debugger",
+			"type": "debugpy",
+			"request": "attach",
+			"connect": {
+				"host": "localhost",
+				"port": 5678,
+			},
+		}
 	]
 }

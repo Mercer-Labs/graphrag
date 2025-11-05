@@ -14,6 +14,14 @@ from graphrag.config.defaults import graphrag_config_defaults
 from graphrag.config.enums import IndexingMethod, SearchMethod
 
 INVALID_METHOD_ERROR = "Invalid method"
+CLI_DEBUG_MODE = os.getenv("CLI_DEBUG_MODE", "false").lower() == "true"
+if CLI_DEBUG_MODE:
+    print("CLI_DEBUG_MODE is enabled")
+    import debugpy
+    debugpy.listen(5678)
+    print("Waiting for debugger to attach on port 5678...")
+    debugpy.wait_for_client()
+    print("Debugger attached")
 
 app = typer.Typer(
     help="GraphRAG: A graph-based retrieval-augmented generation (RAG) system.",
