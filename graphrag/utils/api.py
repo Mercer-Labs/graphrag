@@ -53,6 +53,9 @@ class MultiVectorStore(BaseVectorStore):
 
     def search_by_id(self, id: str) -> VectorStoreDocument:
         """Search for a document by id."""
+        # In multi-search, we add the index name to the id, so we need to split it out - like
+        #  text_units_df["id"] = text_units_df["id"].apply(lambda x, index_name=index_name: f"{x}-{index_name}" )
+
         search_index_id = id.split("-")[0]
         search_index_name = id.split("-")[1]
         for index_name, embedding_store in zip(

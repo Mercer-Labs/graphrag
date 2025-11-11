@@ -3,6 +3,8 @@
 
 """Parameterization settings for the default configuration."""
 
+from typing import Any
+
 from pydantic import BaseModel, Field, model_validator
 
 from graphrag.config.defaults import vector_store_defaults
@@ -85,6 +87,12 @@ class VectorStoreConfig(BaseModel):
     overwrite: bool = Field(
         description="Overwrite the existing data.",
         default=vector_store_defaults.overwrite,
+    )
+    
+    """Custom parameters for custom vector stores"""
+    custom_parameters: dict[str, Any] = Field(
+        description="Custom parameters for custom vector stores",
+        default=vector_store_defaults.custom_parameters,
     )
 
     embeddings_schema: dict[str, VectorStoreSchemaConfig] = {}

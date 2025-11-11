@@ -11,6 +11,7 @@ from graphrag.data_model.community_report import CommunityReport
 from graphrag.data_model.entity import Entity
 
 
+# It looks like we are redoing the community selection - but this tries to capture ALL involved communities, not just the ones that fit in the context window
 def get_candidate_communities(
     selected_entities: list[Entity],
     community_reports: list[CommunityReport],

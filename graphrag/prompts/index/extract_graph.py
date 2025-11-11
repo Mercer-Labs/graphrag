@@ -4,96 +4,266 @@
 """A file containing prompts definition."""
 
 GRAPH_EXTRACTION_PROMPT = """
--Goal-
-Given a text document of type {document_type}, identify all entities and their types from the text and all relationships among the identified entities.
- 
--Steps-
-1. Identify all entities. For each identified entity, extract the following information:
-- entity_name: Name of the entity, capitalized
-- entity_description: Comprehensive description of the entity's attributes and activities
-- entity_type: Pick an appropriate entity type based on the entity's name and description. If unsure, use "ENTITY".
-Format each entity as ("entity"{tuple_delimiter}<entity_name>{tuple_delimiter}<entity_type>{tuple_delimiter}<entity_description>)
- 
-2. From the entities identified in step 1, identify all pairs of (source_entity, target_entity) that are *clearly related* to each other.
+<Goal>
+Given a text document of type {document_type}, identify all nouns and concepts as entities. Capture their name, attributes and their types from the text. Also extract relationships among the identified entities.
+</Goal>
+<Steps>
+<Step id="1">
+Identify all nouns and concepts entities. For each identified entity, extract the following information:
+- entity_name: Name of the entity, capitalized. Resolve references within the text to the right entity. Don't create entities that cannot be identified by name.
+- entity_id: create an unique id out of the name if there are duplicate entries. Else use entity_name itself
+- entity_attributes: List of the entity's attributes that specifically identifies this instance. Do not include information that can be modeled as a relationship with another entity. Leave empty if nothing is provided.
+- entity_type: Pick an appropriate entity type based on the entity's name and attributes. If unsure, use "ENTITY".
+</Step>
+<Step id="2">
+From the entities identified in step 1, identify all pairs of (source entity, target entity) that are *clearly related* to each other. The relationships are bidirectional.
 For each pair of related entities, extract the following information:
-- source_entity: name of the source entity, as identified in step 1
-- target_entity: name of the target entity, as identified in step 1
-- relationship_description: explanation as to why you think the source entity and the target entity are related to each other
+- source_entity_id: id of the source entity, as identified in step 1
+- target_entity_id: id of the target entity, as identified in step 1
+- relationship_description: explanation as to why you think the source entity and the target entity are related to each other based on the text. Do not include information not present in the text.
 - relationship_strength: a numeric score indicating strength of the relationship between the source entity and target entity
- Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_strength>)
- 
-3. Return output in English as a single list of all the entities and relationships identified in steps 1 and 2. Use **{record_delimiter}** as the list delimiter.
- 
-4. When finished, output {completion_delimiter}
- 
-######################
--Examples-
-######################
-Example 1:
+</Step>
+</Step>
+<Step id="3">
+
+Return output as a well-formed JSON-formatted string with provided format. Don't use any unnecessary escape sequences. The output should be a single JSON object that can be parsed by json.loads.
+
+</Step>
+</Steps>
+
+<Examples>
+<Example>
+<Input>
 Document_type: NEWS
 Text:
 The Verdantis's Central Institution is scheduled to meet on Monday and Thursday, with the institution planning to release its latest policy decision on Thursday at 1:30 p.m. PDT, followed by a press conference where Central Institution Chair Martin Smith will take questions. Investors expect the Market Strategy Committee to hold its benchmark interest rate steady in a range of 3.5%-3.75%.
-######################
-Output:
-("entity"{tuple_delimiter}CENTRAL INSTITUTION{tuple_delimiter}ORGANIZATION{tuple_delimiter}The Central Institution is the Federal Reserve of Verdantis, which is setting interest rates on Monday and Thursday)
-{record_delimiter}
-("entity"{tuple_delimiter}MARTIN SMITH{tuple_delimiter}PERSON{tuple_delimiter}Martin Smith is the chair of the Central Institution)
-{record_delimiter}
-("entity"{tuple_delimiter}MARKET STRATEGY COMMITTEE{tuple_delimiter}ORGANIZATION{tuple_delimiter}The Central Institution committee makes key decisions about interest rates and the growth of Verdantis's money supply)
-{record_delimiter}
-("relationship"{tuple_delimiter}MARTIN SMITH{tuple_delimiter}CENTRAL INSTITUTION{tuple_delimiter}Martin Smith is the Chair of the Central Institution and will answer questions at a press conference{tuple_delimiter}9)
-{completion_delimiter}
-
-######################
-Example 2:
+</Input>
+<Output>
+{
+ "entities": [
+  { 
+  "entity_name": "Verdantis's Central Institution",
+  "entity_id": "Verdantis's Central Institution",
+   "entity_type": "ORGANIZATION",
+   "entity_attributes": []
+  },
+  {
+   "entity_name": "Monday",
+"entity_id": "Monday",
+   "entity_type": "DATE",
+   "entity_attributes": []
+  },
+  {
+   "entity_name": "Thursday",
+"entity_id": "Thursday",
+   "entity_type": "DATE",
+   "entity_attributes": []
+  },
+  {
+   "entity_name": "Latest policy decision",
+"entity_id": "Latest policy decision",
+   "entity_type": "CONCEPT",
+   "entity_attributes": []
+  },
+  {
+   "entity_name": "1:30 p.m. PDT",
+"entity_id": "1:30 p.m. PDT",
+   "entity_type": "TIME",
+   "entity_attributes": []
+  },
+  {
+   "entity_name": "Press conference",
+"entity_id": "Press conference",
+   "entity_type": "EVENT",
+   "entity_attributes": []
+  },
+  {
+   "entity_name": "Martin Smith",
+"entity_id": "Martin Smith",
+   "entity_type": "PERSON",
+   "entity_attributes": ["Chair"]
+  },
+  {
+   "entity_name": "Verdantis's Central Institution Chair Martin Smith",
+"entity_id": "Verdantis's Central Institution Chair Martin Smith",
+   "entity_type": "PERSON",
+   "entity_attributes": []
+  },
+  {
+   "entity_name": "Investors",
+"entity_id": "Investors",
+   "entity_type": "PERSON_GROUP",
+   "entity_attributes": []
+  },
+  {
+   "entity_name": "Market Strategy Committee",
+"entity_id": "Market Strategy Committee",
+   "entity_type": "ORGANIZATION",
+   "entity_attributes": []
+  },
+  {
+   "entity_name": "Benchmark interest rate",
+"entity_id": "Benchmark interest rate",
+   "entity_type": "FINANCIAL_INSTRUMENT",
+   "entity_attributes": []
+  },
+  {
+   "entity_name": "3.5%-3.75%",
+"entity_id": "3.5%-3.75%",
+   "entity_type": "PERCENTAGE",
+   "entity_attributes": []
+  }
+ ],
+ "relationships": [
+  {
+   "source_entity_id": "Verdantis's Central Institution",
+"target_entity_id": "Monday",
+   "relationship_description": "The Verdantis's Central Institution is scheduled to meet on Monday.",
+   "relationship_strength": 0.8
+  },
+  {
+   "source_entity_id": "Verdantis's Central Institution",
+   "target_entity_id": "Thursday",
+   "relationship_description": "The Verdantis's Central Institution is scheduled to meet on Thursday.",
+   "relationship_strength": 0.8
+  },
+  {
+   "source_entity_id": "Verdantis's Central Institution",
+   "target_entity_id": "Latest policy decision",
+   "relationship_description": "The Verdantis's Central Institution is planning to release its latest policy decision.",
+   "relationship_strength": 0.7
+  },
+  {
+   "source_entity_id": "Latest policy decision",
+   "target_entity_id": "Thursday",
+   "relationship_description": "The latest policy decision is to be released on Thursday.",
+   "relationship_strength": 0.8
+  },
+  {
+   "source_entity_id": "Latest policy decision",
+   "target_entity_id": "1:30 p.m. PDT",
+   "relationship_description": "The latest policy decision is to be released at 1:30 p.m. PDT.",
+   "relationship_strength": 0.8
+  },
+  {
+   "source_entity_id": "Verdantis's Central Institution",
+   "target_entity_id": "Press conference",
+   "relationship_description": "The release of the policy decision is followed by a press conference hosted by The Verdantis's Central Institution.",
+   "relationship_strength": 0.7
+  },
+  {
+   "source_entity_id": "Press conference",
+   "target_entity_id": "Verdantis's Central Institution Chair Martin Smith",
+   "relationship_description": "Verdantis's Central Institution Chair Martin Smith will take questions at the press conference.",
+   "relationship_strength": 0.9
+  },
+  {
+   "source_entity_id": "Martin Smith",
+   "target_entity_id": "Verdantis's Central Institution",
+   "relationship_description": "Martin Smith is the Chair of the Verdantis's Central Institution.",
+   "relationship_strength": 0.9
+  },
+  {
+   "source_entity_id": "Investors",
+   "target_entity_id": "Market Strategy Committee",
+   "relationship_description": "Investors expect the Market Strategy Committee to take action.",
+   "relationship_strength": 0.6
+  },
+  {
+   "source_entity_id": "Market Strategy Committee",
+   "target_entity_id": "Benchmark interest rate",
+   "relationship_description": "The Market Strategy Committee is expected to hold its benchmark interest rate steady.",
+   "relationship_strength": 0.8
+  },
+  {
+   "source_entity_id": "Benchmark interest rate",
+   "target_entity_id": "3.5%-3.75%",
+   "relationship_description": "The benchmark interest rate is expected to be in the range of 3.5%-3.75%.",
+   "relationship_strength": 0.9
+  }
+ ]
+}
+</Output>
+</Example>
+<Example>
+<Input>
 Document_type: NEWS
 Text:
-Two Aurelians jailed for 8 years in Firuzabad and widely regarded as hostages are on their way home to Aurelia.
+Rama and Rama are two friends with the same name. The former married Sita and latter lived with Lash.
+</Input>
+<Output>
+{
+  "entities": [
+    {
+      "entity_name": "Rama",
+      "entity_id": "Rama 1",
+      "entity_type": "PERSON",
+      "entity_attributes": [
+        "former"
+      ]
+    },
+    {
+      "entity_name": "Rama",
+      "entity_id": "Rama 2",
+      "entity_type": "PERSON",
+      "entity_attributes": [
+        "latter"
+      ]
+    },
+    {
+      "entity_name": "Two friends",
+      "entity_id": "Two friends",
+      "entity_type": "PERSON_GROUP",
+      "entity_attributes": [
+        "with the same name"
+      ]
+    },
+    {
+      "entity_name": "Sita",
+      "entity_id": "Sita",
+      "entity_type": "PERSON",
+      "entity_attributes": []
+    },
+    {
+      "entity_name": "Lash",
+      "entity_id": "Lash",
+      "entity_type": "PERSON",
+      "entity_attributes": []
+    }
+  ],
+  "relationships": [
+    {
+      "source_entity_id": "Rama 1",
+      "target_entity_id": "Two friends",
+      "relationship_description": "Rama 1 is one of the two friends.",
+      "relationship_strength": 0.9
+    },
+    {
+      "source_entity_id": "Rama 2",
+      "target_entity_id": "Two friends",
+      "relationship_description": "Rama 2 is one of the two friends.",
+      "relationship_strength": 0.9
+    },
+    {
+      "source_entity_id": "Rama 1",
+      "target_entity_id": "Sita",
+      "relationship_description": "Rama 1 married Sita.",
+      "relationship_strength": 0.9
+    },
+    {
+      "source_entity_id": "Rama 2",
+      "target_entity_id": "Lash",
+      "relationship_description": "Rama 2 lived with Lash.",
+      "relationship_strength": 0.8
+    }
+  ]
+}
+</Output>
+</Example>
+</Examples>
 
-The swap orchestrated by Quintara was finalized when $8bn of Firuzi funds were transferred to financial institutions in Krohaara, the capital of Quintara.
-
-The exchange initiated in Firuzabad's capital, Tiruzia, led to the two men, who are also Firuzi nationals, boarding a chartered flight to Krohaara.
-
-The Aurelians include 39-year-old businessman Samuel Namara, who has been held in Tiruzia's Alhamia Prison, as well as journalist Durke Bataglani, 59 who also holds Bratinas nationality.
-######################
-Output:
-("entity"{tuple_delimiter}FIRUZABAD{tuple_delimiter}GEO{tuple_delimiter}Firuzabad held Aurelians as hostages)
-{record_delimiter}
-("entity"{tuple_delimiter}AURELIA{tuple_delimiter}GEO{tuple_delimiter}Country seeking to release hostages)
-{record_delimiter}
-("entity"{tuple_delimiter}QUINTARA{tuple_delimiter}GEO{tuple_delimiter}Country that negotiated a swap of money in exchange for hostages)
-{record_delimiter}
-("entity"{tuple_delimiter}TIRUZIA{tuple_delimiter}GEO{tuple_delimiter}Capital of Firuzabad where the Aurelians were being held)
-{record_delimiter}
-("entity"{tuple_delimiter}KROHAARA{tuple_delimiter}GEO{tuple_delimiter}Capital city in Quintara)
-{record_delimiter}
-("entity"{tuple_delimiter}SAMUEL NAMARA{tuple_delimiter}PERSON{tuple_delimiter}Aurelian who spent time in Tiruzia's Alhamia Prison)
-{record_delimiter}
-("entity"{tuple_delimiter}ALHAMIA PRISON{tuple_delimiter}GEO{tuple_delimiter}Prison in Tiruzia)
-{record_delimiter}
-("entity"{tuple_delimiter}DURKE BATAGLANI{tuple_delimiter}PERSON{tuple_delimiter}Aurelian journalist who was held hostage)
-{record_delimiter}
-("relationship"{tuple_delimiter}FIRUZABAD{tuple_delimiter}AURELIA{tuple_delimiter}Firuzabad negotiated a hostage exchange with Aurelia{tuple_delimiter}2)
-{record_delimiter}
-("relationship"{tuple_delimiter}QUINTARA{tuple_delimiter}AURELIA{tuple_delimiter}Quintara brokered the hostage exchange between Firuzabad and Aurelia{tuple_delimiter}2)
-{record_delimiter}
-("relationship"{tuple_delimiter}QUINTARA{tuple_delimiter}FIRUZABAD{tuple_delimiter}Quintara brokered the hostage exchange between Firuzabad and Aurelia{tuple_delimiter}2)
-{record_delimiter}
-("relationship"{tuple_delimiter}SAMUEL NAMARA{tuple_delimiter}ALHAMIA PRISON{tuple_delimiter}Samuel Namara was a prisoner at Alhamia prison{tuple_delimiter}8)
-{record_delimiter}
-("relationship"{tuple_delimiter}SAMUEL NAMARA{tuple_delimiter}DURKE BATAGLANI{tuple_delimiter}Samuel Namara and Durke Bataglani were exchanged in the same hostage release{tuple_delimiter}2)
-{record_delimiter}
-("relationship"{tuple_delimiter}SAMUEL NAMARA{tuple_delimiter}FIRUZABAD{tuple_delimiter}Samuel Namara was a hostage in Firuzabad{tuple_delimiter}2)
-{record_delimiter}
-("relationship"{tuple_delimiter}DURKE BATAGLANI{tuple_delimiter}FIRUZABAD{tuple_delimiter}Durke Bataglani was a hostage in Firuzabad{tuple_delimiter}2)
-{completion_delimiter}
-
-######################
--Real Data-
-######################
 Document_type: {document_type}
 Text: {input_text}
-######################
 Output:"""
 
 CONTINUE_PROMPT = "MANY entities and relationships were missed in the last extraction. Remember to ONLY emit entities that match any of the previously extracted types. Add them below using the same format:\n"

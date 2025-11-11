@@ -6,7 +6,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from graphrag.config.embeddings import default_embeddings
 from graphrag.config.enums import (
@@ -429,6 +429,7 @@ class VectorStoreDefaults:
     audience: None = None
     database_name: None = None
     schema: None = None
+    custom_parameters: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

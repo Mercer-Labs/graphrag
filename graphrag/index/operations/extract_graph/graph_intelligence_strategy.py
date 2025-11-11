@@ -49,9 +49,6 @@ async def run_extract_graph(
     args: StrategyConfig,
 ) -> EntityExtractionResult:
     """Run the entity extraction chain."""
-    tuple_delimiter = args.get("tuple_delimiter", None)
-    record_delimiter = args.get("record_delimiter", None)
-    completion_delimiter = args.get("completion_delimiter", None)
     extraction_prompt = args.get("extraction_prompt", None)
     max_gleanings = args.get(
         "max_gleanings", graphrag_config_defaults.extract_graph.max_gleanings
@@ -71,9 +68,6 @@ async def run_extract_graph(
         list(text_list),
         {
             "document_type": document_type,
-            "tuple_delimiter": tuple_delimiter,
-            "record_delimiter": record_delimiter,
-            "completion_delimiter": completion_delimiter,
         },
     )
 
@@ -81,18 +75,14 @@ async def run_extract_graph(
     # Map the "source_id" back to the "id" field
     for _, node in graph.nodes(data=True):  # type: ignore
         if node is not None:
-            node["source_id"] = ",".join(
-                docs[int(id)].id for id in node["source_id"].split(",")
-            )
+            node["source_id"] = docs[node["source_id"]].id
 
     for _, _, edge in graph.edges(data=True):  # type: ignore
         if edge is not None:
-            edge["source_id"] = ",".join(
-                docs[int(id)].id for id in edge["source_id"].split(",")
-            )
+            edge["source_id"] = docs[edge["source_id"]].id
 
     entities = [
-        ({"title": item[0], **(item[1] or {})})
+        ({"id": item[0], **(item[1] or {})})
         for item in graph.nodes(data=True)
         if item is not None
     ]

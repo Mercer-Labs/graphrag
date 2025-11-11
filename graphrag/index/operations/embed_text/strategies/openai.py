@@ -22,7 +22,6 @@ from graphrag.tokenizer.get_tokenizer import get_tokenizer
 
 logger = logging.getLogger(__name__)
 
-
 async def run(
     input: list[str],
     callbacks: WorkflowCallbacks,

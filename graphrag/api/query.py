@@ -118,6 +118,7 @@ async def global_search(
         response_type=response_type,
         query=query,
         callbacks=callbacks,
+        verbose=verbose,
     ):
         full_response += chunk
     logger.debug("Query response: %s", truncate(full_response, 400))
@@ -400,6 +401,7 @@ async def local_search(
         response_type=response_type,
         query=query,
         callbacks=callbacks,
+        verbose=verbose,
     ):
         full_response += chunk
     logger.debug("Query response: %s", truncate(full_response, 400))
@@ -763,6 +765,7 @@ async def drift_search(
         response_type=response_type,
         query=query,
         callbacks=callbacks,
+        verbose=verbose,
     ):
         full_response += chunk
     logger.debug("Query response: %s", truncate(full_response, 400))
@@ -1096,6 +1099,7 @@ async def basic_search(
         text_units=text_units,
         query=query,
         callbacks=callbacks,
+        verbose=verbose,
     ):
         full_response += chunk
     logger.debug("Query response: %s", truncate(full_response, 400))

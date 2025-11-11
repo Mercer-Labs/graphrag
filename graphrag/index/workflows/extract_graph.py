@@ -120,9 +120,16 @@ async def extract_graph(
     raw_entities = extracted_entities.copy()
     raw_relationships = extracted_relationships.copy()
 
-    entities, relationships = await get_summarized_entities_relationships(
+    canonical_entities, canonical_relationships = await canonicalize_graph(
         extracted_entities=extracted_entities,
         extracted_relationships=extracted_relationships,
+        callbacks=callbacks,
+        cache=cache,
+    )
+    
+    entities, relationships = await get_summarized_entities_relationships(
+        extracted_entities=canonical_entities,
+        extracted_relationships=canonical_relationships,
         callbacks=callbacks,
         cache=cache,
         summarization_strategy=summarization_strategy,
@@ -131,6 +138,22 @@ async def extract_graph(
 
     return (entities, relationships, raw_entities, raw_relationships)
 
+async def canonicalize_graph(
+    extracted_entities: pd.DataFrame,
+    extracted_relationships: pd.DataFrame,
+    callbacks: WorkflowCallbacks,
+    cache: PipelineCache,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Canonicalize the graph.
+    - Merge entities with the same title and type.
+    - Merge relationships with the same source and target.
+    - Calculate the combined degree of the relationships (source degree + target degree)
+    - Calculate the combined degree of the entities (source degree + target degree)
+    - Calculate the combined degree of the relationships (source degree + target degree)
+    """
+    #TODO SUBU HERE <<<<< HERE >>>>>
+    return (extracted_entities, extracted_relationships)
 
 async def get_summarized_entities_relationships(
     extracted_entities: pd.DataFrame,

@@ -67,6 +67,7 @@ _minimal_graph_workflows = [
     "finalize_graph",
     "extract_covariates",
     "create_final_text_units",
+    # TODO SUBU: add generate_text_embeddings - depends on embed_text.names config not having community*. This is needed if we want to use DRIFT/Global/Local search.
 ]
 _fast_workflows = [
     "create_base_text_units",

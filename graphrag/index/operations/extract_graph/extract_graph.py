@@ -72,11 +72,8 @@ async def extract_graph(
         if result:
             entity_dfs.append(pd.DataFrame(result[0]))
             relationship_dfs.append(pd.DataFrame(result[1]))
-
-    entities = _merge_entities(entity_dfs)
-    relationships = _merge_relationships(relationship_dfs)
-
-    return (entities, relationships)
+    # TODO SUBU probably minor: The relationship dfs were merged with ignore_index=False ... dunno why.
+    return (pd.concat(entity_dfs, ignore_index=True), pd.concat(relationship_dfs, ignore_index=True))
 
 
 def _load_strategy(strategy_type: ExtractEntityStrategyType) -> EntityExtractStrategy:
@@ -93,28 +90,3 @@ def _load_strategy(strategy_type: ExtractEntityStrategyType) -> EntityExtractStr
             msg = f"Unknown strategy: {strategy_type}"
             raise ValueError(msg)
 
-
-def _merge_entities(entity_dfs) -> pd.DataFrame:
-    all_entities = pd.concat(entity_dfs, ignore_index=True)
-    return (
-        all_entities.groupby(["title", "type"], sort=False)
-        .agg(
-            description=("description", list),
-            text_unit_ids=("source_id", list),
-            frequency=("source_id", "count"),
-        )
-        .reset_index()
-    )
-
-
-def _merge_relationships(relationship_dfs) -> pd.DataFrame:
-    all_relationships = pd.concat(relationship_dfs, ignore_index=False)
-    return (
-        all_relationships.groupby(["source", "target"], sort=False)
-        .agg(
-            description=("description", list),
-            text_unit_ids=("source_id", list),
-            weight=("weight", "sum"),
-        )
-        .reset_index()
-    )

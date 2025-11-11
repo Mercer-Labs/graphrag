@@ -3,14 +3,18 @@
 
 """A module containing 'GraphExtractionResult' and 'GraphExtractor' models."""
 
+import hashlib
+import json
 import logging
 import re
 import traceback
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
+from uuid import uuid1
 
 import networkx as nx
+from pydantic import BaseModel, Field
 
 from graphrag.config.defaults import graphrag_config_defaults
 from graphrag.index.typing.error_handler import ErrorHandlerFn
@@ -22,9 +26,6 @@ from graphrag.prompts.index.extract_graph import (
     LOOP_PROMPT,
 )
 
-DEFAULT_TUPLE_DELIMITER = "<|>"
-DEFAULT_RECORD_DELIMITER = "##"
-DEFAULT_COMPLETION_DELIMITER = "<|COMPLETE|>"
 DEFAULT_DOCUMENT_TYPE = "DOCUMENT"
 
 logger = logging.getLogger(__name__)
@@ -32,52 +33,60 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class GraphExtractionResult:
-    """Unipartite graph extraction result class definition."""
+    """Multigraph extraction result class definition."""
 
-    output: nx.Graph
+    output: nx.MultiGraph
     source_docs: dict[Any, Any]
+
+
+class RawEntityModel(BaseModel):
+    """A model for an entity."""
+
+    entity_id: str = Field(description="The id of the entity.")
+    entity_name: str = Field(description="The name of the entity.")
+    entity_type: str = Field(description="The type of the entity.")
+    entity_attributes: list[str] = Field(description="The attributes of the entity.")
+
+
+class RawRelationshipModel(BaseModel):
+    """A model for a relationship."""
+    source_entity_id: str = Field(description="The id of the source entity.")
+    target_entity_id: str = Field(description="The id of the target entity.")
+    relationship_description: str = Field(description="The description of the relationship.")
+    relationship_strength: float = Field(description="The strength of the relationship.")
+
+
+class ExtractGraphResponse(BaseModel):
+    """A model for the expected LLM response shape."""
+
+    entities: list[RawEntityModel] = Field(description="A list of entities identified.")
+    relationships: list[RawRelationshipModel] = Field(description="A list of relationships identified.")
 
 
 class GraphExtractor:
     """Unipartite graph extractor class definition."""
 
     _model: ChatModel
-    _join_descriptions: bool
-    _tuple_delimiter_key: str
-    _record_delimiter_key: str
     _document_type_key: str
     _input_text_key: str
-    _completion_delimiter_key: str
     _entity_name_key: str
-    _input_descriptions_key: str
     _extraction_prompt: str
-    _summarization_prompt: str
     _max_gleanings: int
     _on_error: ErrorHandlerFn
 
     def __init__(
         self,
         model_invoker: ChatModel,
-        tuple_delimiter_key: str | None = None,
-        record_delimiter_key: str | None = None,
         input_text_key: str | None = None,
         document_type_key: str | None = None,
-        completion_delimiter_key: str | None = None,
         prompt: str | None = None,
-        join_descriptions=True,
         max_gleanings: int | None = None,
         on_error: ErrorHandlerFn | None = None,
     ):
         """Init method definition."""
         # TODO: streamline construction
         self._model = model_invoker
-        self._join_descriptions = join_descriptions
         self._input_text_key = input_text_key or "input_text"
-        self._tuple_delimiter_key = tuple_delimiter_key or "tuple_delimiter"
-        self._record_delimiter_key = record_delimiter_key or "record_delimiter"
-        self._completion_delimiter_key = (
-            completion_delimiter_key or "completion_delimiter"
-        )
         self._document_type_key = document_type_key or "document_type"
         self._extraction_prompt = prompt or GRAPH_EXTRACTION_PROMPT
         self._max_gleanings = (
@@ -93,20 +102,12 @@ class GraphExtractor:
         """Call method definition."""
         if prompt_variables is None:
             prompt_variables = {}
-        all_records: dict[int, str] = {}
+        all_records: dict[int, list[ExtractGraphResponse]] = {}
         source_doc_map: dict[int, str] = {}
 
         # Wire defaults into the prompt variables
         prompt_variables = {
             **prompt_variables,
-            self._tuple_delimiter_key: prompt_variables.get(self._tuple_delimiter_key)
-            or DEFAULT_TUPLE_DELIMITER,
-            self._record_delimiter_key: prompt_variables.get(self._record_delimiter_key)
-            or DEFAULT_RECORD_DELIMITER,
-            self._completion_delimiter_key: prompt_variables.get(
-                self._completion_delimiter_key
-            )
-            or DEFAULT_COMPLETION_DELIMITER,
             self._document_type_key: prompt_variables.get(self._document_type_key)
             or DEFAULT_DOCUMENT_TYPE,
         }
@@ -128,11 +129,7 @@ class GraphExtractor:
                     },
                 )
 
-        output = await self._process_results(
-            all_records,
-            prompt_variables.get(self._tuple_delimiter_key, DEFAULT_TUPLE_DELIMITER),
-            prompt_variables.get(self._record_delimiter_key, DEFAULT_RECORD_DELIMITER),
-        )
+        output = await self._process_results(all_records)
 
         return GraphExtractionResult(
             output=output,
@@ -141,14 +138,20 @@ class GraphExtractor:
 
     async def _process_document(
         self, text: str, prompt_variables: dict[str, str]
-    ) -> str:
+    ) -> list[ExtractGraphResponse]:
         response = await self._model.achat(
             self._extraction_prompt.format(**{
                 **prompt_variables,
                 self._input_text_key: text,
             }),
+            json=True,
+            name="extract_graph",
+            json_model=ExtractGraphResponse,
         )
-        results = response.output.content or ""
+        results = [response.parsed_response or ExtractGraphResponse(
+            entities=[],
+            relationships=[],
+        )]
 
         # if gleanings are specified, enter a loop to extract more entities
         # there are two exit criteria: (a) we hit the configured max, (b) the model says there are no more entities
@@ -156,10 +159,15 @@ class GraphExtractor:
             for i in range(self._max_gleanings):
                 response = await self._model.achat(
                     CONTINUE_PROMPT,
-                    name=f"extract-continuation-{i}",
+                    name=f"extract_graph_continuation-{i}",
                     history=response.history,
+                    json=True,
+                    json_model=ExtractGraphResponse,
                 )
-                results += response.output.content or ""
+                results.append(response.parsed_response or ExtractGraphResponse(
+                    entities=[],
+                    relationships=[],
+                ))
 
                 # if this is the final glean, don't bother updating the continuation flag
                 if i >= self._max_gleanings - 1:
@@ -167,133 +175,71 @@ class GraphExtractor:
 
                 response = await self._model.achat(
                     LOOP_PROMPT,
-                    name=f"extract-loopcheck-{i}",
+                    name=f"extract_graph_loopcheck-{i}",
                     history=response.history,
                 )
-                if response.output.content != "Y":
+                if response.parsed_response != "Y":
                     break
 
         return results
 
     async def _process_results(
         self,
-        results: dict[int, str],
-        tuple_delimiter: str,
-        record_delimiter: str,
-    ) -> nx.Graph:
-        """Parse the result string to create an undirected unipartite graph.
+        results: dict[int, list[ExtractGraphResponse]],
+    ) -> nx.MultiGraph:
+        """Parse the result string to create an undirected multigraph.
 
         Args:
-            - results - dict of results from the extraction chain
-            - tuple_delimiter - delimiter between tuples in an output record, default is '<|>'
-            - record_delimiter - delimiter between records, default is '##'
+            - results - dict of results from the extraction chain: Each result is a json object with the following fields:
+                - entities: list of entities 
+                - relationships: list of relationships 
         Returns:
             - output - unipartite graph in graphML format
-        """
-        graph = nx.Graph()
+        """       
+        graph = nx.MultiGraph()
         for source_doc_id, extracted_data in results.items():
-            records = [r.strip() for r in extracted_data.split(record_delimiter)]
+            source_doc_id_str = str(source_doc_id)
+            for response in extracted_data:
+                for entity in response.entities:
+                    entity_name = clean_str(entity.entity_name)
+                    entity_type = clean_str(entity.entity_type)
+                    entity_id = clean_str(entity.entity_id)
+                    entity_attributes = [clean_str(attribute) for attribute in entity.entity_attributes]
+                    
+                    # The different documents aren't related - so we leave the entity merging to later
+                    unique_entity_id = source_doc_id_str + "-" + entity_id
+                    if unique_entity_id in graph.nodes():
+                        # we create an entity per document. So we resolve to existing one.
+                        continue
+                    graph.add_node(
+                        unique_entity_id,
+                        name=entity_name,
+                        type=entity_type,
+                        attributes=entity_attributes,
+                        source_id=source_doc_id,
+                    )
+                for relationship in response.relationships:
+                    source_entity_id = source_doc_id_str + "-" + clean_str(relationship.source_entity_id)
+                    target_entity_id = source_doc_id_str + "-" + clean_str(relationship.target_entity_id)
+                    unique_source_entity_id = source_doc_id_str + "-" + source_entity_id
+                    unique_target_entity_id = source_doc_id_str + "-" + target_entity_id
+                    if unique_source_entity_id not in graph.nodes() or unique_target_entity_id not in graph.nodes():
+                        # TODO SUBU  - handle missing edge links better
+                        logger.warning(f"Error processing document id: {source_doc_id}: Source or target entity not found: {source_entity_id} \
+                            or {target_entity_id}. Skipping relationship {relationship}")
+                        continue
 
-            for record in records:
-                record = re.sub(r"^\(|\)$", "", record.strip())
-                record_attributes = record.split(tuple_delimiter)
-
-                if record_attributes[0] == '"entity"' and len(record_attributes) >= 4:
-                    # add this record as a node in the G
-                    entity_name = clean_str(record_attributes[1].upper())
-                    entity_type = clean_str(record_attributes[2].upper())
-                    entity_description = clean_str(record_attributes[3])
-
-                    if entity_name in graph.nodes():
-                        node = graph.nodes[entity_name]
-                        if self._join_descriptions:
-                            node["description"] = "\n".join(
-                                list({
-                                    *_unpack_descriptions(node),
-                                    entity_description,
-                                })
-                            )
-                        else:
-                            if len(entity_description) > len(node["description"]):
-                                node["description"] = entity_description
-                        node["source_id"] = ", ".join(
-                            list({
-                                *_unpack_source_ids(node),
-                                str(source_doc_id),
-                            })
-                        )
-                        node["type"] = (
-                            entity_type if entity_type != "" else node["type"]
-                        )
-                    else:
-                        graph.add_node(
-                            entity_name,
-                            type=entity_type,
-                            description=entity_description,
-                            source_id=str(source_doc_id),
-                        )
-
-                if (
-                    record_attributes[0] == '"relationship"'
-                    and len(record_attributes) >= 5
-                ):
-                    # add this record as edge
-                    source = clean_str(record_attributes[1].upper())
-                    target = clean_str(record_attributes[2].upper())
-                    edge_description = clean_str(record_attributes[3])
-                    edge_source_id = clean_str(str(source_doc_id))
-                    try:
-                        weight = float(record_attributes[-1])
-                    except ValueError:
-                        weight = 1.0
-
-                    if source not in graph.nodes():
-                        graph.add_node(
-                            source,
-                            type="",
-                            description="",
-                            source_id=edge_source_id,
-                        )
-                    if target not in graph.nodes():
-                        graph.add_node(
-                            target,
-                            type="",
-                            description="",
-                            source_id=edge_source_id,
-                        )
-                    if graph.has_edge(source, target):
-                        edge_data = graph.get_edge_data(source, target)
-                        if edge_data is not None:
-                            weight += edge_data["weight"]
-                            if self._join_descriptions:
-                                edge_description = "\n".join(
-                                    list({
-                                        *_unpack_descriptions(edge_data),
-                                        edge_description,
-                                    })
-                                )
-                            edge_source_id = ", ".join(
-                                list({
-                                    *_unpack_source_ids(edge_data),
-                                    str(source_doc_id),
-                                })
-                            )
+                    # TODO SUBU see if we should move to relationship attributes instead of description.
+                    relationship_description = clean_str(relationship.relationship_description)
+                    relationship_strength = relationship.relationship_strength
                     graph.add_edge(
-                        source,
-                        target,
-                        weight=weight,
-                        description=edge_description,
-                        source_id=edge_source_id,
+                        unique_source_entity_id,
+                        unique_target_entity_id,
+                        strength=relationship_strength,
+                        weight=1.0,
+                        description=relationship_description,
+                        source_id=source_doc_id,
                     )
 
         return graph
 
-
-def _unpack_descriptions(data: Mapping) -> list[str]:
-    value = data.get("description", None)
-    return [] if value is None else value.split("\n")
-
-
-def _unpack_source_ids(data: Mapping) -> list[str]:
-    value = data.get("source_id", None)
-    return [] if value is None else value.split(", ")
