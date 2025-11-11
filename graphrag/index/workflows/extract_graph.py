@@ -177,7 +177,7 @@ async def get_summarized_entities_relationships(
         relationship_summaries, on=["source", "target"], how="left"
     )
 
-    extracted_entities.drop(columns=["description"], inplace=True)
+    extracted_entities.drop(columns=["attributes"], inplace=True)
     entities = extracted_entities.merge(entity_summaries, on="title", how="left")
     return entities, relationships
 

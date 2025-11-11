@@ -50,7 +50,8 @@ async def summarize_descriptions(
         node_futures = [
             do_summarize_descriptions(
                 str(row.title),  # type: ignore
-                sorted(set(row.description)),  # type: ignore
+                # TODO SUBU we need to take another look at summarizing: Currently we try to reuse the same prompt for entities and relationships and its fucked.
+                sorted(set(row.attributes)),  # type: ignore
                 ticker,
                 semaphore,
             )
@@ -70,7 +71,7 @@ async def summarize_descriptions(
         edge_futures = [
             do_summarize_descriptions(
                 (str(row.source), str(row.target)),  # type: ignore
-                sorted(set(row.description)),  # type: ignore
+                sorted(set(row.description if isinstance(row.description, list) else [row.description])),  # type: ignore
                 ticker,
                 semaphore,
             )

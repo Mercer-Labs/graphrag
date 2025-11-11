@@ -158,6 +158,14 @@ class GraphExtractor:
         if self._max_gleanings > 0:
             for i in range(self._max_gleanings):
                 response = await self._model.achat(
+                    LOOP_PROMPT,
+                    name=f"extract_graph_loopcheck-{i}",
+                    history=response.history,
+                )
+                if response.output.content.lower() != "y":
+                    break
+
+                response = await self._model.achat(
                     CONTINUE_PROMPT,
                     name=f"extract_graph_continuation-{i}",
                     history=response.history,
@@ -168,18 +176,6 @@ class GraphExtractor:
                     entities=[],
                     relationships=[],
                 ))
-
-                # if this is the final glean, don't bother updating the continuation flag
-                if i >= self._max_gleanings - 1:
-                    break
-
-                response = await self._model.achat(
-                    LOOP_PROMPT,
-                    name=f"extract_graph_loopcheck-{i}",
-                    history=response.history,
-                )
-                if response.parsed_response != "Y":
-                    break
 
         return results
 
@@ -201,7 +197,8 @@ class GraphExtractor:
             source_doc_id_str = str(source_doc_id)
             for response in extracted_data:
                 for entity in response.entities:
-                    entity_name = clean_str(entity.entity_name)
+                    # names are used as titles from here.
+                    entity_title = clean_str(entity.entity_name)
                     entity_type = clean_str(entity.entity_type)
                     entity_id = clean_str(entity.entity_id)
                     entity_attributes = [clean_str(attribute) for attribute in entity.entity_attributes]
@@ -213,7 +210,7 @@ class GraphExtractor:
                         continue
                     graph.add_node(
                         unique_entity_id,
-                        name=entity_name,
+                        title=entity_title,
                         type=entity_type,
                         attributes=entity_attributes,
                         source_id=source_doc_id,
@@ -221,9 +218,7 @@ class GraphExtractor:
                 for relationship in response.relationships:
                     source_entity_id = source_doc_id_str + "-" + clean_str(relationship.source_entity_id)
                     target_entity_id = source_doc_id_str + "-" + clean_str(relationship.target_entity_id)
-                    unique_source_entity_id = source_doc_id_str + "-" + source_entity_id
-                    unique_target_entity_id = source_doc_id_str + "-" + target_entity_id
-                    if unique_source_entity_id not in graph.nodes() or unique_target_entity_id not in graph.nodes():
+                    if source_entity_id not in graph.nodes() or target_entity_id not in graph.nodes():
                         # TODO SUBU  - handle missing edge links better
                         logger.warning(f"Error processing document id: {source_doc_id}: Source or target entity not found: {source_entity_id} \
                             or {target_entity_id}. Skipping relationship {relationship}")
@@ -233,8 +228,8 @@ class GraphExtractor:
                     relationship_description = clean_str(relationship.relationship_description)
                     relationship_strength = relationship.relationship_strength
                     graph.add_edge(
-                        unique_source_entity_id,
-                        unique_target_entity_id,
+                        source_entity_id,
+                        target_entity_id,
                         strength=relationship_strength,
                         weight=1.0,
                         description=relationship_description,
