@@ -37,7 +37,7 @@ class EntityExtractionResult:
 
 EntityExtractStrategy = Callable[
     [
-        list[Document],
+        Document,
         str,
         PipelineCache,
         StrategyConfig,

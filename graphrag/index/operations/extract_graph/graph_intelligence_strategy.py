@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 async def run_graph_intelligence(
-    docs: list[Document],
+    doc: Document,
     document_type: str,
     cache: PipelineCache,
     args: StrategyConfig,
@@ -39,12 +39,12 @@ async def run_graph_intelligence(
         cache=cache,
     )
 
-    return await run_extract_graph(llm, docs, document_type, args)
+    return await run_extract_graph(llm, doc, document_type, args)
 
 
 async def run_extract_graph(
     model: ChatModel,
-    docs: list[Document],
+    doc: Document,
     document_type: str,
     args: StrategyConfig,
 ) -> EntityExtractionResult:
@@ -62,10 +62,10 @@ async def run_extract_graph(
             "Entity Extraction Error", exc_info=e, extra={"stack": s, "details": d}
         ),
     )
-    text_list = [doc.text.strip() for doc in docs]
+    text = doc.text.strip()
 
     results = await extractor(
-        list(text_list),
+        text,
         {
             "document_type": document_type,
         },
@@ -75,11 +75,11 @@ async def run_extract_graph(
     # Map the "source_id" back to the "id" field
     for _, node in graph.nodes(data=True):  # type: ignore
         if node is not None:
-            node["source_id"] = docs[node["source_id"]].id
+            node["source_id"] = doc.id
 
     for _, _, edge in graph.edges(data=True):  # type: ignore
         if edge is not None:
-            edge["source_id"] = docs[edge["source_id"]].id
+            edge["source_id"] = doc.id
 
     entities = [
         ({"id": item[0], **(item[1] or {})})

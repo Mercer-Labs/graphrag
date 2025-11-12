@@ -49,7 +49,7 @@ async def extract_graph(
         text = row[text_column]
         id = row[id_column]
         result = await strategy_exec(
-            [Document(text=text, id=id)],
+            Document(text=text, id=id),
             document_type or DEFAULT_DOCUMENT_TYPE,
             cache,
             strategy_config,

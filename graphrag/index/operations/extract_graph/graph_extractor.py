@@ -11,12 +11,13 @@ import traceback
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
-from uuid import uuid1
+from uuid import uuid4
 
 import networkx as nx
 from pydantic import BaseModel, Field
 
 from graphrag.config.defaults import graphrag_config_defaults
+from graphrag.index.operations.extract_graph.node_references import NodeReferences
 from graphrag.index.typing.error_handler import ErrorHandlerFn
 from graphrag.index.utils.string import clean_str
 from graphrag.language_model.protocol.base import ChatModel
@@ -36,24 +37,25 @@ class GraphExtractionResult:
     """Multigraph extraction result class definition."""
 
     output: nx.MultiGraph
-    source_docs: dict[Any, Any]
+    source_doc: str
 
 
 class RawEntityModel(BaseModel):
     """A model for an entity."""
 
-    entity_id: str = Field(description="The id of the entity.")
-    entity_name: str = Field(description="The name of the entity.")
-    entity_type: str = Field(description="The type of the entity.")
-    entity_attributes: list[str] = Field(description="The attributes of the entity.")
+    id: str = Field(description="The id of the entity.")
+    name: str = Field(description="The name of the entity.")
+    type: str = Field(description="The type of the entity.")
+    attributes: list[str] = Field(description="The attributes of the entity.")
 
 
 class RawRelationshipModel(BaseModel):
     """A model for a relationship."""
-    source_entity_id: str = Field(description="The id of the source entity.")
-    target_entity_id: str = Field(description="The id of the target entity.")
-    relationship_description: str = Field(description="The description of the relationship.")
-    relationship_strength: float = Field(description="The strength of the relationship.")
+    source: str = Field(description="The id of the source entity.")
+    target: str = Field(description="The id of the target entity.")
+    text_location: int = Field(description="The start location index of the relationship in the provided text")
+    description: str = Field(description="The description of the relationship.")
+    strength: float = Field(description="The strength of the relationship.")
 
 
 class ExtractGraphResponse(BaseModel):
@@ -64,8 +66,7 @@ class ExtractGraphResponse(BaseModel):
 
 
 class GraphExtractor:
-    """Unipartite graph extractor class definition."""
-
+    """Multipartite graph extractor class definition."""
     _model: ChatModel
     _document_type_key: str
     _input_text_key: str
@@ -97,13 +98,11 @@ class GraphExtractor:
         self._on_error = on_error or (lambda _e, _s, _d: None)
 
     async def __call__(
-        self, texts: list[str], prompt_variables: dict[str, Any] | None = None
+        self, text: str, prompt_variables: dict[str, Any] | None = None
     ) -> GraphExtractionResult:
         """Call method definition."""
         if prompt_variables is None:
             prompt_variables = {}
-        all_records: dict[int, list[ExtractGraphResponse]] = {}
-        source_doc_map: dict[int, str] = {}
 
         # Wire defaults into the prompt variables
         prompt_variables = {
@@ -112,33 +111,33 @@ class GraphExtractor:
             or DEFAULT_DOCUMENT_TYPE,
         }
 
-        for doc_index, text in enumerate(texts):
-            try:
-                # Invoke the entity extraction
-                result = await self._process_document(text, prompt_variables)
-                source_doc_map[doc_index] = text
-                all_records[doc_index] = result
-            except Exception as e:
-                logger.exception("error extracting graph")
-                self._on_error(
-                    e,
-                    traceback.format_exc(),
-                    {
-                        "doc_index": doc_index,
-                        "text": text,
-                    },
-                )
+        results: list[ExtractGraphResponse] = []
+        try:
+            # Invoke the entity extraction
+            results = await self._process_document(text, prompt_variables)
+        except Exception as e:
+            logger.exception("error extracting graph")
+            self._on_error(
+                e,
+                traceback.format_exc(),
+                {
+                    "text": text,
+                },
+            )
 
-        output = await self._process_results(all_records)
+        output = await self._process_results(results, text)
 
         return GraphExtractionResult(
             output=output,
-            source_docs=source_doc_map,
+            source_doc=text,
         )
 
     async def _process_document(
         self, text: str, prompt_variables: dict[str, str]
     ) -> list[ExtractGraphResponse]:
+        # Simple protection against usage of Placeholders: For now this should be rare enough.
+        # TODO SUBU make this better.
+        text = NodeReferences.cleanup_placeholders_in_text(text)
         response = await self._model.achat(
             self._extraction_prompt.format(**{
                 **prompt_variables,
@@ -181,7 +180,8 @@ class GraphExtractor:
 
     async def _process_results(
         self,
-        results: dict[int, list[ExtractGraphResponse]],
+        results: list[ExtractGraphResponse],
+        text: str,
     ) -> nx.MultiGraph:
         """Parse the results from each doc: Can contain multiple Responses from retries etc.
 
@@ -193,63 +193,58 @@ class GraphExtractor:
             - output - unipartite graph in graphML format
         """       
         graph = nx.MultiGraph()
-        for source_doc_id, extracted_data in results.items():
-            source_doc_id_str = str(source_doc_id)
-            entity_key_map: dict[str, str] = {}
-            for response in extracted_data:
-                for entity in response.entities:
-                    # names are used as titles from here.
-                    entity_title = clean_str(entity.entity_name)
-                    entity_type = clean_str(entity.entity_type)
-                    entity_id = clean_str(entity.entity_id)
-                    entity_attributes = set([clean_str(attribute) for attribute in entity.entity_attributes])
-                    
-                    if entity_id in entity_key_map:
-                        merge = True
-                    else:
-                        merge = False
-                        entity_key_map[entity_id] = uuid1().hex
-                    unique_entity_id = entity_key_map[entity_id]
-                    if merge:
-                        node = graph.nodes[unique_entity_id]
-                        # We don't expect title/type mismatches, but it's possible because LLMs. We just pick the longer one for now.
-                        # TODO SUBU - figure out a reprocessing pipeline.
-                        if node["title"] != entity_title:
-                            logger.warning(f"Entity title mismatch: {node['title']} != {entity_title} for entity {entity_id}")
-                            node["title"] = entity_title if len(entity_title) > len(node["title"]) else node["title"]
-                        if node["type"] != entity_type:
-                            logger.warning(f"Entity type mismatch: {node['type']} != {entity_type} for entity {entity_id}")
-                            node["type"] = entity_type if len(entity_type) > len(node["type"]) else node["type"]
-                        node["attributes"].update(entity_attributes)
-                        node["source_id"].add(source_doc_id)
-                    else:
-                        graph.add_node(
-                            unique_entity_id,
-                            title=entity_title,
-                            type=entity_type,
-                            attributes=entity_attributes,
-                            source_id={source_doc_id},
-                        )
-                for relationship in response.relationships:
-                    if relationship.source_entity_id not in entity_key_map or relationship.target_entity_id not in entity_key_map:
-                        # TODO SUBU - reprocessing pipeline: handle missing edge links better
-                        logger.warning(f"Error processing document id: {source_doc_id}: Source or target entity not found: {relationship.source_entity_id} \
-                            or {relationship.target_entity_id}. Skipping relationship {relationship}")
-                        continue
-                    source_entity_id = entity_key_map[relationship.source_entity_id]
-                    target_entity_id = entity_key_map[relationship.target_entity_id]
-
-                    # TODO SUBU see if we should move to relationship attributes instead of description.
-                    relationship_description = clean_str(relationship.relationship_description)
-                    relationship_strength = relationship.relationship_strength
-                    graph.add_edge(
-                        source_entity_id,
-                        target_entity_id,
-                        strength=relationship_strength,
-                        weight=1.0,
-                        description=relationship_description,
-                        source_id=source_doc_id,
+        entity_key_map: dict[str, str] = {}
+        for response in results:
+            for entity in response.entities:
+                # names are used as titles from here.
+                entity_title = clean_str(entity.name)
+                entity_type = clean_str(entity.type)
+                entity_id = clean_str(entity.id)
+                entity_attributes = set([clean_str(attribute) for attribute in entity.attributes])
+                
+                if entity_id in entity_key_map:
+                    merge = True
+                else:
+                    merge = False
+                    entity_key_map[entity_id] = uuid4().hex
+                unique_entity_id = entity_key_map[entity_id]
+                if merge:
+                    node = graph.nodes[unique_entity_id]
+                    # We don't expect title/type mismatches, but it's possible because LLMs. We just pick the longer one for now.
+                    # TODO SUBU - figure out a reprocessing pipeline.
+                    if node["title"] != entity_title:
+                        logger.warning(f"Entity title mismatch: {node['title']} != {entity_title} for entity {entity_id}")
+                        node["title"] = entity_title if len(entity_title) > len(node["title"]) else node["title"]
+                    if node["type"] != entity_type:
+                        logger.warning(f"Entity type mismatch: {node['type']} != {entity_type} for entity {entity_id}")
+                        node["type"] = entity_type if len(entity_type) > len(node["type"]) else node["type"]
+                    node["attributes"].update(entity_attributes)
+                else:
+                    graph.add_node(
+                        unique_entity_id,
+                        title=entity_title,
+                        type=entity_type,
+                        attributes=entity_attributes,
                     )
+            for relationship in response.relationships:
+                if relationship.source not in entity_key_map or relationship.target not in entity_key_map:
+                    # TODO SUBU - reprocessing pipeline: handle missing edge links better
+                    logger.warning(f"Error processing document text: {text}: Source or target entity not found: {relationship.source} \
+                        or {relationship.target}. Skipping relationship {relationship}")
+                    continue
+                source_entity_id = entity_key_map[relationship.source]
+                target_entity_id = entity_key_map[relationship.target]
+
+                # TODO SUBU see if we should move to relationship attributes instead of description.
+                cleaned_desc = NodeReferences.encode_node_references_in_llm_output(clean_str(relationship.description), source_entity_id, target_entity_id)
+                graph.add_edge(
+                    source_entity_id,
+                    target_entity_id,
+                    strength=relationship.strength,
+                    weight=1.0,
+                    description=cleaned_desc,
+                    text_location=relationship.text_location,
+                )
 
         return graph
 
