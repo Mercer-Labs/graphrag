@@ -183,7 +183,7 @@ class GraphExtractor:
         self,
         results: dict[int, list[ExtractGraphResponse]],
     ) -> nx.MultiGraph:
-        """Parse the result string to create an undirected multigraph.
+        """Parse the results from each doc: Can contain multiple Responses from retries etc.
 
         Args:
             - results - dict of results from the extraction chain: Each result is a json object with the following fields:
@@ -195,34 +195,49 @@ class GraphExtractor:
         graph = nx.MultiGraph()
         for source_doc_id, extracted_data in results.items():
             source_doc_id_str = str(source_doc_id)
+            entity_key_map: dict[str, str] = {}
             for response in extracted_data:
                 for entity in response.entities:
                     # names are used as titles from here.
                     entity_title = clean_str(entity.entity_name)
                     entity_type = clean_str(entity.entity_type)
                     entity_id = clean_str(entity.entity_id)
-                    entity_attributes = [clean_str(attribute) for attribute in entity.entity_attributes]
+                    entity_attributes = set([clean_str(attribute) for attribute in entity.entity_attributes])
                     
-                    # The different documents aren't related - so we leave the entity merging to later
-                    unique_entity_id = source_doc_id_str + "-" + entity_id
-                    if unique_entity_id in graph.nodes():
-                        # we create an entity per document. So we resolve to existing one.
-                        continue
-                    graph.add_node(
-                        unique_entity_id,
-                        title=entity_title,
-                        type=entity_type,
-                        attributes=entity_attributes,
-                        source_id=source_doc_id,
-                    )
+                    if entity_id in entity_key_map:
+                        merge = True
+                    else:
+                        merge = False
+                        entity_key_map[entity_id] = uuid1().hex
+                    unique_entity_id = entity_key_map[entity_id]
+                    if merge:
+                        node = graph.nodes[unique_entity_id]
+                        # We don't expect title/type mismatches, but it's possible because LLMs. We just pick the longer one for now.
+                        # TODO SUBU - figure out a reprocessing pipeline.
+                        if node["title"] != entity_title:
+                            logger.warning(f"Entity title mismatch: {node['title']} != {entity_title} for entity {entity_id}")
+                            node["title"] = entity_title if len(entity_title) > len(node["title"]) else node["title"]
+                        if node["type"] != entity_type:
+                            logger.warning(f"Entity type mismatch: {node['type']} != {entity_type} for entity {entity_id}")
+                            node["type"] = entity_type if len(entity_type) > len(node["type"]) else node["type"]
+                        node["attributes"].update(entity_attributes)
+                        node["source_id"].add(source_doc_id)
+                    else:
+                        graph.add_node(
+                            unique_entity_id,
+                            title=entity_title,
+                            type=entity_type,
+                            attributes=entity_attributes,
+                            source_id={source_doc_id},
+                        )
                 for relationship in response.relationships:
-                    source_entity_id = source_doc_id_str + "-" + clean_str(relationship.source_entity_id)
-                    target_entity_id = source_doc_id_str + "-" + clean_str(relationship.target_entity_id)
-                    if source_entity_id not in graph.nodes() or target_entity_id not in graph.nodes():
-                        # TODO SUBU  - handle missing edge links better
-                        logger.warning(f"Error processing document id: {source_doc_id}: Source or target entity not found: {source_entity_id} \
-                            or {target_entity_id}. Skipping relationship {relationship}")
+                    if relationship.source_entity_id not in entity_key_map or relationship.target_entity_id not in entity_key_map:
+                        # TODO SUBU - reprocessing pipeline: handle missing edge links better
+                        logger.warning(f"Error processing document id: {source_doc_id}: Source or target entity not found: {relationship.source_entity_id} \
+                            or {relationship.target_entity_id}. Skipping relationship {relationship}")
                         continue
+                    source_entity_id = entity_key_map[relationship.source_entity_id]
+                    target_entity_id = entity_key_map[relationship.target_entity_id]
 
                     # TODO SUBU see if we should move to relationship attributes instead of description.
                     relationship_description = clean_str(relationship.relationship_description)

@@ -173,6 +173,7 @@ async def get_summarized_entities_relationships(
         num_threads=summarization_num_threads,
     )
 
+    # TODO SUBU - There are duplicate titles and source/targets: This causes a cartesian product explosion ... fix it.
     relationships = extracted_relationships.drop(columns=["description"]).merge(
         relationship_summaries, on=["source", "target"], how="left"
     )
