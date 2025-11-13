@@ -10,8 +10,18 @@ import pandas as pd
 
 from graphrag.cache.pipeline_cache import PipelineCache
 from graphrag.callbacks.workflow_callbacks import WorkflowCallbacks
+from graphrag.config.embeddings import (
+    raw_entity_title_embedding,
+    raw_relationship_description_embedding,
+)
 from graphrag.config.enums import AsyncType
+from graphrag.config.get_embedding_settings import get_embedding_settings
 from graphrag.config.models.graph_rag_config import GraphRagConfig
+from graphrag.index.operations.canonicalize_entities import canonicalize_entities
+from graphrag.index.operations.canonicalize_relationships import (
+    canonicalize_relationships,
+)
+from graphrag.index.operations.embed_text.embed_text import embed_text
 from graphrag.index.operations.extract_graph.extract_graph import (
     extract_graph as extractor,
 )
@@ -47,7 +57,7 @@ async def run_workflow(
         config.root_dir, summarization_llm_settings
     )
 
-    entities, relationships, raw_entities, raw_relationships = await extract_graph(
+    raw_entities, raw_relationships = await extract_raw_graph(
         text_units=text_units,
         callbacks=context.callbacks,
         cache=context.cache,
@@ -55,20 +65,30 @@ async def run_workflow(
         extraction_num_threads=extract_graph_llm_settings.concurrent_requests,
         extraction_async_mode=extract_graph_llm_settings.async_mode,
         document_type=config.extract_graph.document_type,
+    )
+
+    raw_entities, raw_relationships = await preprocess_raw_graph(
+        raw_entities=raw_entities,
+        raw_relationships=raw_relationships,
+        callbacks=context.callbacks,
+        cache=context.cache,
+        text_embed_config=get_embedding_settings(config),
+    )
+
+    await write_table_to_storage(raw_entities, "raw_entities", context.output_storage)
+    await write_table_to_storage(raw_relationships, "raw_relationships", context.output_storage)
+
+    entities, relationships = await process_raw_graph(
+        raw_entities=raw_entities,
+        raw_relationships=raw_relationships,
+        callbacks=context.callbacks,
+        cache=context.cache,
         summarization_strategy=summarization_strategy,
         summarization_num_threads=summarization_llm_settings.concurrent_requests,
     )
 
     await write_table_to_storage(entities, "entities", context.output_storage)
     await write_table_to_storage(relationships, "relationships", context.output_storage)
-
-    if config.snapshots.raw_graph:
-        await write_table_to_storage(
-            raw_entities, "raw_entities", context.output_storage
-        )
-        await write_table_to_storage(
-            raw_relationships, "raw_relationships", context.output_storage
-        )
 
     logger.info("Workflow completed: extract_graph")
     return WorkflowFunctionOutput(
@@ -79,7 +99,7 @@ async def run_workflow(
     )
 
 
-async def extract_graph(
+async def extract_raw_graph(
     text_units: pd.DataFrame,
     callbacks: WorkflowCallbacks,
     cache: PipelineCache,
@@ -87,10 +107,8 @@ async def extract_graph(
     extraction_num_threads: int = 4,
     extraction_async_mode: AsyncType = AsyncType.AsyncIO,
     document_type: str | None = None,
-    summarization_strategy: dict[str, Any] | None = None,
-    summarization_num_threads: int = 4,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """All the steps to create the base entity graph."""
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """All the steps to create the raw entity graph."""
     # this returns a graph for each text unit, to be merged later
     extracted_entities, extracted_relationships = await extractor(
         text_units=text_units,
@@ -115,16 +133,50 @@ async def extract_graph(
         )
         logger.error(error_msg)
         raise ValueError(error_msg)
+    return (extracted_entities, extracted_relationships)
 
-    # copy these as is before any summarization
-    raw_entities = extracted_entities.copy()
-    raw_relationships = extracted_relationships.copy()
+async def preprocess_raw_graph(
+    raw_entities: pd.DataFrame,
+    raw_relationships: pd.DataFrame,
+    callbacks: WorkflowCallbacks,
+    cache: PipelineCache,
+    text_embed_config: dict,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """All the steps to preprocess the raw graph."""
 
-    canonical_entities, canonical_relationships = await canonicalize_graph(
-        extracted_entities=extracted_entities,
-        extracted_relationships=extracted_relationships,
+    #Embed raw entities and relationships
+    raw_entities["embedding"] = await embed_text(
+        input=raw_entities.loc[:, ["id", "title"]],
         callbacks=callbacks,
         cache=cache,
+        embedding_name=raw_entity_title_embedding,
+        embed_column="title",
+        strategy=text_embed_config["strategy"],
+    )
+    raw_relationships["embedding"] = await embed_text(
+        input=raw_relationships.loc[:, ["id", "description"]],
+        callbacks=callbacks,
+        cache=cache,
+        embedding_name=raw_relationship_description_embedding,
+        embed_column="description",
+        strategy=text_embed_config["strategy"],
+    )
+
+    
+    return (raw_entities, raw_relationships)
+
+async def process_raw_graph(
+    raw_entities: pd.DataFrame,
+    raw_relationships: pd.DataFrame,
+    callbacks: WorkflowCallbacks,
+    cache: PipelineCache,
+    summarization_strategy: dict[str, Any] | None = None,
+    summarization_num_threads: int = 4,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Process the raw graph."""
+    canonical_entities, canonical_relationships = await canonicalize_graph(
+        entities=raw_entities,
+        relationships=raw_relationships,
     )
     
     entities, relationships = await get_summarized_entities_relationships(
@@ -136,24 +188,19 @@ async def extract_graph(
         summarization_num_threads=summarization_num_threads,
     )
 
-    return (entities, relationships, raw_entities, raw_relationships)
+    return (entities, relationships)
 
 async def canonicalize_graph(
-    extracted_entities: pd.DataFrame,
-    extracted_relationships: pd.DataFrame,
-    callbacks: WorkflowCallbacks,
-    cache: PipelineCache,
+    entities: pd.DataFrame,
+    relationships: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Canonicalize the graph.
-    - Merge entities with the same title and type.
-    - Merge relationships with the same source and target.
-    - Calculate the combined degree of the relationships (source degree + target degree)
-    - Calculate the combined degree of the entities (source degree + target degree)
-    - Calculate the combined degree of the relationships (source degree + target degree)
     """
-    #TODO SUBU HERE <<<<< HERE >>>>>
-    return (extracted_entities, extracted_relationships)
+    canonical_entities = canonicalize_entities(entities, relationships)
+    canonical_relationships = canonicalize_relationships(relationships)
+    return (canonical_entities, canonical_relationships)
+
 
 async def get_summarized_entities_relationships(
     extracted_entities: pd.DataFrame,

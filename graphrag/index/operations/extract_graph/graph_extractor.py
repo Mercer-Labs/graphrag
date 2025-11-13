@@ -47,6 +47,7 @@ class RawEntityModel(BaseModel):
     name: str = Field(description="The name of the entity.")
     type: str = Field(description="The type of the entity.")
     attributes: list[str] = Field(description="The attributes of the entity.")
+    is_proper_noun: bool = Field(description="Whether the entity is a proper noun.")
 
 
 class RawRelationshipModel(BaseModel):
@@ -225,6 +226,7 @@ class GraphExtractor:
                         title=entity_title,
                         type=entity_type,
                         attributes=entity_attributes,
+                        is_proper_noun=entity.is_proper_noun,
                     )
             for relationship in response.relationships:
                 if relationship.source not in entity_key_map or relationship.target not in entity_key_map:

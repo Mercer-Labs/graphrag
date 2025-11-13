@@ -14,6 +14,7 @@ Identify all nouns and concepts entities. For each identified entity, extract th
 - id: create an unique id out of the name if there are duplicate entries. Else use name itself
 - attributes: List of the entity's attributes that specifically identifies this instance. Do not include information that can be modeled as a relationship with another entity. Leave empty if nothing is provided.
 - type: Pick an appropriate entity type based on the entity's name and attributes. If unsure, use "ENTITY".
+- is_proper_noun: Is this entity referring to a specific person, place, or thing? If unsure, set to False.
 </Step>
 <Step id="2">
 From the entities identified in step 1, identify all pairs of (source entity, target entity) that are *clearly related* to each other. The relationships are bidirectional.

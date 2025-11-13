@@ -14,14 +14,13 @@ from graphrag.index.operations.extract_graph.graph_extractor import GraphExtract
 from graphrag.index.operations.extract_graph.typing import (
     Document,
     EntityExtractionResult,
-    EntityTypes,
     StrategyConfig,
 )
+from graphrag.data_model.schemas import SystemAttributes
 from graphrag.language_model.manager import ModelManager
 from graphrag.language_model.protocol.base import ChatModel
 
 logger = logging.getLogger(__name__)
-
 
 async def run_graph_intelligence(
     doc: Document,
@@ -76,10 +75,12 @@ async def run_extract_graph(
     for _, node in graph.nodes(data=True):  # type: ignore
         if node is not None:
             node["source_id"] = doc.id
+            node[SystemAttributes.RAW] = True
 
     for _, _, edge in graph.edges(data=True):  # type: ignore
         if edge is not None:
             edge["source_id"] = doc.id
+            edge[SystemAttributes.RAW] = True
 
     entities = [
         ({"id": item[0], **(item[1] or {})})

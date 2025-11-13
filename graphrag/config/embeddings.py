@@ -3,6 +3,8 @@
 
 """A module containing embeddings values."""
 
+raw_entity_title_embedding = "raw_entity.title"
+raw_relationship_description_embedding = "raw_relationship.description"
 entity_title_embedding = "entity.title"
 entity_description_embedding = "entity.description"
 relationship_description_embedding = "relationship.description"
@@ -13,6 +15,8 @@ community_full_content_embedding = "community.full_content"
 text_unit_text_embedding = "text_unit.text"
 
 all_embeddings: set[str] = {
+    raw_entity_title_embedding,
+    raw_relationship_description_embedding,
     entity_title_embedding,
     entity_description_embedding,
     relationship_description_embedding,
@@ -23,6 +27,8 @@ all_embeddings: set[str] = {
     text_unit_text_embedding,
 }
 default_embeddings: list[str] = [
+    raw_entity_title_embedding, # used for canonicalization
+    raw_relationship_description_embedding, # used for canonicalization
     entity_description_embedding,
     community_full_content_embedding,
     text_unit_text_embedding,

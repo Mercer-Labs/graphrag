@@ -2,12 +2,19 @@
 # Licensed under the MIT License
 """Common field name definitions for data frames."""
 
+from enum import Enum
+
 ID = "id"
 SHORT_ID = "human_readable_id"
 TITLE = "title"
 DESCRIPTION = "description"
 
 TYPE = "type"
+
+class SystemAttributes:
+    SYSTEM_PREFIX = "_sys_"
+    RAW = SYSTEM_PREFIX + "raw"
+    CANONICAL = SYSTEM_PREFIX + "canonical"
 
 # POST-PREP NODE TABLE SCHEMA
 NODE_DEGREE = "degree"
