@@ -95,6 +95,7 @@ class VectorStoreConfig(BaseModel):
         default=vector_store_defaults.custom_parameters,
     )
 
+    """Ability to override the default embeddings schema for a given embedding name."""
     embeddings_schema: dict[str, VectorStoreSchemaConfig] = {}
 
     def _validate_embeddings_schema(self) -> None:

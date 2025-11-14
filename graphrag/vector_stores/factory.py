@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from graphrag.config.enums import VectorStoreType
 from graphrag.vector_stores.azure_ai_search import AzureAISearchVectorStore
+from graphrag.vector_stores.chromadb import ChromaDBVectorStore
 from graphrag.vector_stores.cosmosdb import CosmosDBVectorStore
 from graphrag.vector_stores.lancedb import LanceDBVectorStore
 
@@ -53,6 +54,7 @@ class VectorStoreFactory:
         cls,
         vector_store_type: str,
         vector_store_schema_config: VectorStoreSchemaConfig,
+        llm_config: dict,
         **kwargs: dict,
     ) -> BaseVectorStore:
         """Create a vector store object from the provided type.
@@ -74,7 +76,9 @@ class VectorStoreFactory:
             raise ValueError(msg)
 
         return cls._registry[vector_store_type](
-            vector_store_schema_config=vector_store_schema_config, **kwargs
+            vector_store_schema_config=vector_store_schema_config,
+            llm_config=llm_config,
+            **kwargs,
         )
 
     @classmethod
@@ -94,3 +98,4 @@ VectorStoreFactory.register(
     VectorStoreType.AzureAISearch.value, AzureAISearchVectorStore
 )
 VectorStoreFactory.register(VectorStoreType.CosmosDB.value, CosmosDBVectorStore)
+VectorStoreFactory.register(VectorStoreType.Chroma.value, ChromaDBVectorStore)

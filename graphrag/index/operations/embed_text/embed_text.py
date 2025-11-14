@@ -48,12 +48,17 @@ async def embed_text(
 ):
     """Embed a piece of text into a vector space. The operation outputs a new column containing a mapping between doc_id and vector."""
     vector_store_config = strategy.get("vector_store")
+    llm_config = strategy.get("llm")
+    
+    vector_store_schema_config = _get_vector_store_schema_config(vector_store_config, embedding_name)
+    # Kinda clumsy - TODO SUBU fix this.
+    strategy["vector_store_schema_config"] = vector_store_schema_config.model_dump()
 
     if vector_store_config:
-        index_name = _get_index_name(vector_store_config, embedding_name)
-        vector_store: BaseVectorStore = _create_vector_store(
-            vector_store_config, index_name, embedding_name
+        vector_store: BaseVectorStore = get_vector_store_for_write(
+            vector_store_config, llm_config, embedding_name
         )
+        # TODO SUBU this seems odd: We don't really set a per embedding_name vector store config anywhere. Probably cruft.
         vector_store_workflow_config = vector_store_config.get(
             embedding_name, vector_store_config
         )
@@ -183,16 +188,10 @@ async def _text_embed_with_vector_store(
     return all_results
 
 
-def _create_vector_store(
-    vector_store_config: dict, index_name: str, embedding_name: str | None = None
-) -> BaseVectorStore:
-    vector_store_type: str = str(vector_store_config.get("type"))
-
+def _get_vector_store_schema_config(vector_store_config: dict, embedding_name: str) -> VectorStoreSchemaConfig:
     embeddings_schema: dict[str, VectorStoreSchemaConfig] = vector_store_config.get(
         "embeddings_schema", {}
     )
-    single_embedding_config: VectorStoreSchemaConfig = VectorStoreSchemaConfig()
-
     if (
         embeddings_schema is not None
         and embedding_name is not None
@@ -200,16 +199,25 @@ def _create_vector_store(
     ):
         raw_config = embeddings_schema[embedding_name]
         if isinstance(raw_config, dict):
-            single_embedding_config = VectorStoreSchemaConfig(**raw_config)
-        else:
-            single_embedding_config = raw_config
+            return VectorStoreSchemaConfig(**raw_config)
+        return raw_config
+    return VectorStoreSchemaConfig()
 
+
+def get_vector_store_for_write(
+    vector_store_config: dict, llm_config: dict, embedding_name: str, index_name_test_override: str | None = None
+) -> BaseVectorStore:
+    index_name = index_name_test_override or _get_index_name(vector_store_config, embedding_name)
+    vector_store_type: str = str(vector_store_config.get("type"))
+
+    single_embedding_config = _get_vector_store_schema_config(vector_store_config, embedding_name)
     if single_embedding_config.index_name is None:
         single_embedding_config.index_name = index_name
 
     vector_store = VectorStoreFactory().create_vector_store(
         vector_store_schema_config=single_embedding_config,
         vector_store_type=vector_store_type,
+        llm_config=llm_config,
         **vector_store_config,
     )
 

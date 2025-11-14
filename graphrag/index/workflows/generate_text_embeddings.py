@@ -105,6 +105,7 @@ async def generate_text_embeddings(
     embedded_fields: list[str],
 ) -> dict[str, pd.DataFrame]:
     """All the steps to generate all embeddings."""
+    # TODO SUBU note that the raw embeddings are created in extract_graph.py. So we don't add them here.
     embedding_param_map = {
         document_text_embedding: {
             "data": documents.loc[:, ["id", "text"]] if documents is not None else None,

@@ -10,13 +10,13 @@ import networkx as nx
 from graphrag.cache.pipeline_cache import PipelineCache
 from graphrag.config.defaults import graphrag_config_defaults
 from graphrag.config.models.language_model_config import LanguageModelConfig
+from graphrag.data_model.schemas import SystemAttributes
 from graphrag.index.operations.extract_graph.graph_extractor import GraphExtractor
 from graphrag.index.operations.extract_graph.typing import (
     Document,
     EntityExtractionResult,
     StrategyConfig,
 )
-from graphrag.data_model.schemas import SystemAttributes
 from graphrag.language_model.manager import ModelManager
 from graphrag.language_model.protocol.base import ChatModel
 
@@ -75,12 +75,12 @@ async def run_extract_graph(
     for _, node in graph.nodes(data=True):  # type: ignore
         if node is not None:
             node["source_id"] = doc.id
-            node[SystemAttributes.RAW] = True
+            node["node_type"] = SystemAttributes.RAW
 
     for _, _, edge in graph.edges(data=True):  # type: ignore
         if edge is not None:
             edge["source_id"] = doc.id
-            edge[SystemAttributes.RAW] = True
+            edge["edge_type"] = SystemAttributes.RAW
 
     entities = [
         ({"id": item[0], **(item[1] or {})})
@@ -88,6 +88,6 @@ async def run_extract_graph(
         if item is not None
     ]
 
-    relationships = nx.to_pandas_edgelist(graph)
+    relationships = nx.to_pandas_edgelist(graph, edge_key="key")
 
     return EntityExtractionResult(entities, relationships, graph)

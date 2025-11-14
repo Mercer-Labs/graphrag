@@ -36,6 +36,12 @@ async def run(
     batch_max_tokens = args.get("batch_max_tokens", 8191)
     llm_config = args["llm"]
     llm_config = LanguageModelConfig(**args["llm"])
+    vector_store_schema_config = args["vector_store_schema_config"]
+    extra_kwargs = {
+        "task_type": vector_store_schema_config["task_type"],
+        "dimensions": vector_store_schema_config["vector_size"],
+    }
+    
     splitter = _get_splitter(llm_config, batch_max_tokens)
     model = ModelManager().get_or_create_embedding_model(
         name="text_embedding",
@@ -69,7 +75,7 @@ async def run(
     )
 
     # Embed each chunk of snippets
-    embeddings = await _execute(model, text_batches, ticker, semaphore)
+    embeddings = await _execute(model, text_batches, ticker, semaphore, extra_kwargs=extra_kwargs)
     embeddings = _reconstitute_embeddings(embeddings, input_sizes)
 
     return TextEmbeddingResult(embeddings=embeddings)
@@ -89,10 +95,12 @@ async def _execute(
     chunks: list[list[str]],
     tick: ProgressTicker,
     semaphore: asyncio.Semaphore,
+    extra_kwargs: dict[str, Any] = {},
 ) -> list[list[float]]:
     async def embed(chunk: list[str]):
         async with semaphore:
-            chunk_embeddings = await model.aembed_batch(chunk)
+            # TODO SUBU add kwargs for input_type and dimensions
+            chunk_embeddings = await model.aembed_batch(chunk, **extra_kwargs)
             result = np.array(chunk_embeddings)
             tick(1)
         return result

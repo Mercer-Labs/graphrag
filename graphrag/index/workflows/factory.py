@@ -13,7 +13,7 @@ from graphrag.index.typing.workflow import WorkflowFunction
 
 logger = logging.getLogger(__name__)
 
-
+# TODO SUBU - today the workflows pretty much operate in memory using dataframes. We need to make this work off of databases and storage to make it more scalable.
 class PipelineFactory:
     """A factory class for workflow pipelines."""
 

@@ -6,6 +6,7 @@
 from graphrag.config.models.graph_rag_config import GraphRagConfig
 
 
+# NOTE This is for the index/write path: We expect to write to a single vector store.
 def get_embedding_settings(
     settings: GraphRagConfig,
     vector_store_params: dict | None = None,
@@ -26,11 +27,14 @@ def get_embedding_settings(
     strategy = settings.embed_text.resolved_strategy(
         embeddings_llm_settings
     )  # get the default strategy
+    # TODO SUBU - we probably should augment the vector embedding schema config settings right here.
     strategy.update({
         "vector_store": {
             **(vector_store_params or {}),
             **(vector_store_settings),
-        }
+        },
+        "embed_text_vector_store_id": settings.embed_text.vector_store_id,
+        "embed_text_model_id": settings.embed_text.model_id,
     })  # update the default strategy with the vector store settings
     # This ensures the vector store config is part of the strategy and not the global config
     return {

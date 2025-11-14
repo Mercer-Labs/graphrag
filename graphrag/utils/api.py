@@ -3,6 +3,7 @@
 
 """API functions for the GraphRAG module."""
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -10,17 +11,21 @@ from graphrag.cache.factory import CacheFactory
 from graphrag.cache.pipeline_cache import PipelineCache
 from graphrag.config.embeddings import create_index_name
 from graphrag.config.models.cache_config import CacheConfig
+from graphrag.config.models.graph_rag_config import GraphRagConfig
 from graphrag.config.models.storage_config import StorageConfig
 from graphrag.config.models.vector_store_schema_config import VectorStoreSchemaConfig
 from graphrag.data_model.types import TextEmbedder
 from graphrag.storage.factory import StorageFactory
 from graphrag.storage.pipeline_storage import PipelineStorage
+from graphrag.utils.cli import redact
 from graphrag.vector_stores.base import (
     BaseVectorStore,
     VectorStoreDocument,
     VectorStoreSearchResult,
 )
 from graphrag.vector_stores.factory import VectorStoreFactory
+
+logger = logging.getLogger(__name__)
 
 
 class MultiVectorStore(BaseVectorStore):
@@ -29,7 +34,7 @@ class MultiVectorStore(BaseVectorStore):
     def __init__(
         self,
         embedding_stores: list[BaseVectorStore],
-        index_names: list[str],
+        index_names: list[str], #NOTE: The vector store ID is the index name.
     ):
         self.embedding_stores = embedding_stores
         self.index_names = index_names
@@ -53,7 +58,7 @@ class MultiVectorStore(BaseVectorStore):
 
     def search_by_id(self, id: str) -> VectorStoreDocument:
         """Search for a document by id."""
-        # In multi-search, we add the index name to the id, so we need to split it out - like
+        # In multi-search, we add the index name (vector store ID) to the id, so we need to split it out - like
         #  text_units_df["id"] = text_units_df["id"].apply(lambda x, index_name=index_name: f"{x}-{index_name}" )
 
         search_index_id = id.split("-")[0]
@@ -97,20 +102,26 @@ class MultiVectorStore(BaseVectorStore):
         return []
 
 
-def get_embedding_store(
-    config_args: dict[str, dict],
+
+# NOTE: Even though this supports multiple vector stores, load_documents / embed_text hard codes to a single one ... 
+# This is the read path. It is meant to be used for querying across multiple vector stores from different runs: This reads
+# the embedding index present in EACH VECTOR_STORE_ID defined in config and merges outputs.
+def get_vector_store_for_query(
+    vector_store_args: dict,
+    llm_config: dict,
     embedding_name: str,
 ) -> BaseVectorStore:
     """Get the embedding description store."""
-    num_indexes = len(config_args)
+    num_indexes = len(vector_store_args)
     embedding_stores = []
-    index_names = []
-    for index, store in config_args.items():
+    vector_store_ids = []
+    for vector_store_id, store in vector_store_args.items():
         vector_store_type = store["type"]
         index_name = create_index_name(
             store.get("container_name", "default"), embedding_name
         )
 
+        # Override default configs if provided.
         embeddings_schema: dict[str, VectorStoreSchemaConfig] = store.get(
             "embeddings_schema", {}
         )
@@ -133,6 +144,7 @@ def get_embedding_store(
         embedding_store = VectorStoreFactory().create_vector_store(
             vector_store_type=vector_store_type,
             vector_store_schema_config=single_embedding_config,
+            llm_config=llm_config,
             **store,
         )
         embedding_store.connect(**store)
@@ -140,8 +152,8 @@ def get_embedding_store(
         if num_indexes == 1:
             return embedding_store
         embedding_stores.append(embedding_store)
-        index_names.append(index)
-    return MultiVectorStore(embedding_stores, index_names)
+        vector_store_ids.append(vector_store_id)
+    return MultiVectorStore(embedding_stores, vector_store_ids)
 
 
 def reformat_context_data(context_data: dict) -> dict:

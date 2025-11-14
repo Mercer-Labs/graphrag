@@ -44,7 +44,9 @@ class BaseVectorStore(ABC):
         vector_store_schema_config: VectorStoreSchemaConfig,
         db_connection: Any | None = None,
         document_collection: Any | None = None,
-        query_filter: Any | None = None,
+        # TODO SUBU This should be removed: We should not be stashing query filters - they should be passed in as arguments.
+        # Today this means we can't share vectorstore clients
+        query_filter: Any | None = None, 
         **kwargs: Any,
     ):
         self.db_connection = db_connection
@@ -58,6 +60,7 @@ class BaseVectorStore(ABC):
         self.vector_field = vector_store_schema_config.vector_field
         self.attributes_field = vector_store_schema_config.attributes_field
         self.vector_size = vector_store_schema_config.vector_size
+        self.task_type = vector_store_schema_config.task_type
 
     @abstractmethod
     def connect(self, **kwargs: Any) -> None:

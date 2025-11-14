@@ -7,6 +7,8 @@ raw_entity_title_embedding = "raw_entity.title"
 raw_relationship_description_embedding = "raw_relationship.description"
 entity_title_embedding = "entity.title"
 entity_description_embedding = "entity.description"
+canonical_entity_title_embedding = "canonical_entity.title"
+canonical_entity_description_embedding = "canonical_entity.description"
 relationship_description_embedding = "relationship.description"
 document_text_embedding = "document.text"
 community_title_embedding = "community.title"
@@ -19,6 +21,8 @@ all_embeddings: set[str] = {
     raw_relationship_description_embedding,
     entity_title_embedding,
     entity_description_embedding,
+    canonical_entity_title_embedding,
+    canonical_entity_description_embedding,
     relationship_description_embedding,
     document_text_embedding,
     community_title_embedding,
@@ -29,6 +33,8 @@ all_embeddings: set[str] = {
 default_embeddings: list[str] = [
     raw_entity_title_embedding, # used for canonicalization
     raw_relationship_description_embedding, # used for canonicalization
+    canonical_entity_title_embedding, # used for canonicalization   
+    canonical_entity_description_embedding, # used for canonicalization
     entity_description_embedding,
     community_full_content_embedding,
     text_unit_text_embedding,

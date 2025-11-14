@@ -7,11 +7,8 @@ from typing import TYPE_CHECKING, Any
 
 import litellm
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-from litellm import (
-    EmbeddingResponse,  # type: ignore
-    aembedding,
-    embedding,
-)
+from litellm import EmbeddingResponse  # type: ignore
+from litellm import aembedding, embedding
 
 from graphrag.config.defaults import COGNITIVE_SERVICES_AUDIENCE
 from graphrag.config.enums import AuthType
@@ -189,6 +186,8 @@ class LitellmEmbeddingModel:
             config, self.cache, "embeddings"
         )
 
+    # TODO SUBU - we probably should assert that we set input_type and dimensions in the kwargs for GEMINI embedding models.
+    # See https://github.com/BerriAI/litellm/blob/main/litellm/llms/vertex_ai/vertex_embeddings/transformation.py#L84C13-L84C23
     def _get_kwargs(self, **kwargs: Any) -> dict[str, Any]:
         """Get model arguments supported by litellm."""
         args_to_include = [
@@ -197,6 +196,9 @@ class LitellmEmbeddingModel:
             "encoding_format",
             "timeout",
             "user",
+            # NOTE: Added to support Gemini TaskType.SEMANTIC_SIMILARITY. See https://github.com/BerriAI/litellm/blob/main/litellm/llms/vertex_ai/vertex_embeddings/transformation.py#L84C13-L84C23
+            # NOTE2: Even though the link shows input_type, the code leaves it in and causes an error ...
+            "task_type", 
         ]
         return {k: v for k, v in kwargs.items() if k in args_to_include}
 

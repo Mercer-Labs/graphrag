@@ -49,15 +49,30 @@ from graphrag.query.indexer_adapters import (
     read_indexer_text_units,
 )
 from graphrag.utils.api import (
-    get_embedding_store,
+    get_vector_store_for_query,
     load_search_prompt,
     truncate,
     update_context_data,
 )
 from graphrag.utils.cli import redact
+from graphrag.vector_stores.base import BaseVectorStore
 
 # Initialize standard logger
 logger = logging.getLogger(__name__)
+
+
+def _get_vector_store_for_query(
+    config: GraphRagConfig,
+    embedding_name: str,
+) -> BaseVectorStore:
+    vector_store_args = {}
+    for index, store in config.vector_store.items():
+        vector_store_args[index] = store.model_dump()
+    llm_config = config.get_language_model_config(config.embed_text.model_id).model_dump()
+    msg = f"Vector Store Args: {redact(vector_store_args)}, LLM Config: {redact(llm_config)}"
+    logger.debug(msg)
+
+    return get_vector_store_for_query(vector_store_args, llm_config, embedding_name)
 
 
 @validate_call(config={"arbitrary_types_allowed": True})
@@ -443,14 +458,8 @@ def local_search_streaming(
     """
     init_loggers(config=config, verbose=verbose, filename="query.log")
 
-    vector_store_args = {}
-    for index, store in config.vector_store.items():
-        vector_store_args[index] = store.model_dump()
-    msg = f"Vector Store Args: {redact(vector_store_args)}"
-    logger.debug(msg)
-
-    description_embedding_store = get_embedding_store(
-        config_args=vector_store_args,
+    description_embedding_store = _get_vector_store_for_query(
+        config=config,
         embedding_name=entity_description_embedding,
     )
 
@@ -804,19 +813,13 @@ def drift_search_streaming(
     """
     init_loggers(config=config, verbose=verbose, filename="query.log")
 
-    vector_store_args = {}
-    for index, store in config.vector_store.items():
-        vector_store_args[index] = store.model_dump()
-    msg = f"Vector Store Args: {redact(vector_store_args)}"
-    logger.debug(msg)
-
-    description_embedding_store = get_embedding_store(
-        config_args=vector_store_args,
+    description_embedding_store = _get_vector_store_for_query(
+        config=config,
         embedding_name=entity_description_embedding,
     )
 
-    full_content_embedding_store = get_embedding_store(
-        config_args=vector_store_args,
+    full_content_embedding_store = _get_vector_store_for_query(
+        config=config,
         embedding_name=community_full_content_embedding,
     )
 
@@ -1128,14 +1131,8 @@ def basic_search_streaming(
     """
     init_loggers(config=config, verbose=verbose, filename="query.log")
 
-    vector_store_args = {}
-    for index, store in config.vector_store.items():
-        vector_store_args[index] = store.model_dump()
-    msg = f"Vector Store Args: {redact(vector_store_args)}"
-    logger.debug(msg)
-
-    embedding_store = get_embedding_store(
-        config_args=vector_store_args,
+    embedding_store = _get_vector_store_for_query(
+        config=config,
         embedding_name=text_unit_text_embedding,
     )
 

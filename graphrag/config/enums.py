@@ -65,6 +65,7 @@ class VectorStoreType(str, Enum):
     LanceDB = "lancedb"
     AzureAISearch = "azure_ai_search"
     CosmosDB = "cosmosdb"
+    Chroma = "chroma"
 
 
 class ReportingType(str, Enum):

@@ -67,16 +67,19 @@ async def run_workflow(
         document_type=config.extract_graph.document_type,
     )
 
+    text_embed_config_strategy = get_embedding_settings(config)["strategy"]
+
     raw_entities, raw_relationships = await preprocess_raw_graph(
         raw_entities=raw_entities,
         raw_relationships=raw_relationships,
         callbacks=context.callbacks,
         cache=context.cache,
-        text_embed_config=get_embedding_settings(config),
+        text_embed_config_strategy=text_embed_config_strategy,
     )
 
-    await write_table_to_storage(raw_entities, "raw_entities", context.output_storage)
-    await write_table_to_storage(raw_relationships, "raw_relationships", context.output_storage)
+    if config.snapshots.raw_graph:
+        await write_table_to_storage(raw_entities.drop(columns=["embedding"]), "raw_entities", context.output_storage)
+        await write_table_to_storage(raw_relationships.drop(columns=["embedding"]), "raw_relationships", context.output_storage)
 
     entities, relationships = await process_raw_graph(
         raw_entities=raw_entities,
@@ -85,6 +88,7 @@ async def run_workflow(
         cache=context.cache,
         summarization_strategy=summarization_strategy,
         summarization_num_threads=summarization_llm_settings.concurrent_requests,
+        text_embed_config_strategy=text_embed_config_strategy,
     )
 
     await write_table_to_storage(entities, "entities", context.output_storage)
@@ -140,7 +144,7 @@ async def preprocess_raw_graph(
     raw_relationships: pd.DataFrame,
     callbacks: WorkflowCallbacks,
     cache: PipelineCache,
-    text_embed_config: dict,
+    text_embed_config_strategy: dict,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """All the steps to preprocess the raw graph."""
 
@@ -151,18 +155,17 @@ async def preprocess_raw_graph(
         cache=cache,
         embedding_name=raw_entity_title_embedding,
         embed_column="title",
-        strategy=text_embed_config["strategy"],
+        strategy=text_embed_config_strategy,
     )
     raw_relationships["embedding"] = await embed_text(
-        input=raw_relationships.loc[:, ["id", "description"]],
+        input=raw_relationships.loc[:, ["key", "text_description"]],
         callbacks=callbacks,
         cache=cache,
         embedding_name=raw_relationship_description_embedding,
-        embed_column="description",
-        strategy=text_embed_config["strategy"],
+        id_column="key",
+        embed_column="text_description",
+        strategy=text_embed_config_strategy,
     )
-
-    
     return (raw_entities, raw_relationships)
 
 async def process_raw_graph(
@@ -170,6 +173,7 @@ async def process_raw_graph(
     raw_relationships: pd.DataFrame,
     callbacks: WorkflowCallbacks,
     cache: PipelineCache,
+    text_embed_config_strategy: dict,
     summarization_strategy: dict[str, Any] | None = None,
     summarization_num_threads: int = 4,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -177,6 +181,7 @@ async def process_raw_graph(
     canonical_entities, canonical_relationships = await canonicalize_graph(
         entities=raw_entities,
         relationships=raw_relationships,
+        text_embed_config_strategy=text_embed_config_strategy,
     )
     
     entities, relationships = await get_summarized_entities_relationships(
@@ -193,11 +198,12 @@ async def process_raw_graph(
 async def canonicalize_graph(
     entities: pd.DataFrame,
     relationships: pd.DataFrame,
+    text_embed_config_strategy: dict,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Canonicalize the graph.
     """
-    canonical_entities = canonicalize_entities(entities, relationships)
+    canonical_entities = canonicalize_entities(entities, relationships, pd.DataFrame(), pd.DataFrame(), text_embed_config_strategy)
     canonical_relationships = canonicalize_relationships(relationships)
     return (canonical_entities, canonical_relationships)
 
@@ -225,7 +231,7 @@ async def get_summarized_entities_relationships(
         relationship_summaries, on=["source", "target"], how="left"
     )
 
-    extracted_entities.drop(columns=["attributes"], inplace=True)
+    #extracted_entities.drop(columns=["attributes"], inplace=True)
     entities = extracted_entities.merge(entity_summaries, on="title", how="left")
     return entities, relationships
 

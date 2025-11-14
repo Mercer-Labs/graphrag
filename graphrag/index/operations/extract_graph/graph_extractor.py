@@ -11,10 +11,10 @@ import traceback
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
-from uuid import uuid4
 
 import networkx as nx
 from pydantic import BaseModel, Field
+from uuid_utils import uuid7
 
 from graphrag.config.defaults import graphrag_config_defaults
 from graphrag.index.operations.extract_graph.node_references import NodeReferences
@@ -207,7 +207,7 @@ class GraphExtractor:
                     merge = True
                 else:
                     merge = False
-                    entity_key_map[entity_id] = uuid4().hex
+                    entity_key_map[entity_id] = uuid7().hex # use this for time-sortability
                 unique_entity_id = entity_key_map[entity_id]
                 if merge:
                     node = graph.nodes[unique_entity_id]
@@ -216,15 +216,15 @@ class GraphExtractor:
                     if node["title"] != entity_title:
                         logger.warning(f"Entity title mismatch: {node['title']} != {entity_title} for entity {entity_id}")
                         node["title"] = entity_title if len(entity_title) > len(node["title"]) else node["title"]
-                    if node["type"] != entity_type:
-                        logger.warning(f"Entity type mismatch: {node['type']} != {entity_type} for entity {entity_id}")
-                        node["type"] = entity_type if len(entity_type) > len(node["type"]) else node["type"]
+                    if node["llm_inferred_type"] != entity_type:
+                        logger.warning(f"Entity type mismatch: {node['llm_inferred_type']} != {entity_type} for entity {entity_id}")
+                        node["llm_inferred_type"] = entity_type if len(entity_type) > len(node["llm_inferred_type"]) else node["llm_inferred_type"]
                     node["attributes"].update(entity_attributes)
                 else:
                     graph.add_node(
                         unique_entity_id,
                         title=entity_title,
-                        type=entity_type,
+                        llm_inferred_type=entity_type,
                         attributes=entity_attributes,
                         is_proper_noun=entity.is_proper_noun,
                     )
@@ -239,12 +239,15 @@ class GraphExtractor:
 
                 # TODO SUBU see if we should move to relationship attributes instead of description.
                 cleaned_desc = NodeReferences.encode_node_references_in_llm_output(clean_str(relationship.description), source_entity_id, target_entity_id)
+                text_description = NodeReferences.hydrate_node_references(cleaned_desc, graph.nodes)
                 graph.add_edge(
                     source_entity_id,
                     target_entity_id,
+                    key=uuid7().hex,
                     strength=relationship.strength,
                     weight=1.0,
                     description=cleaned_desc,
+                    text_description=text_description,
                     text_location=relationship.text_location,
                 )
 

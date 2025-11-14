@@ -176,6 +176,7 @@ class EmbedGraphDefaults:
 class EmbedTextDefaults:
     """Default values for embedding text."""
 
+    # TODO SUBU this probably can be removed: The model default isn't used anywhere. (init uses DEFAULT_EMBEDDING_MODEL directly)
     model: str = "text-embedding-3-small"
     batch_size: int = 16
     batch_max_tokens: int = 8191
@@ -388,6 +389,7 @@ class SnapshotsDefaults:
 
     embeddings: bool = False
     graphml: bool = False
+    raw_graph: bool = False
 
 
 @dataclass

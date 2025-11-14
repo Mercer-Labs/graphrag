@@ -7,7 +7,8 @@ import re
 
 from pydantic import BaseModel, Field, model_validator
 
-DEFAULT_VECTOR_SIZE: int = 1536
+DEFAULT_VECTOR_SIZE: int = 3072 #gemini number.
+DEFAULT_TASK_TYPE: str = "SEMANTIC_SIMILARITY"
 
 VALID_IDENTIFIER_REGEX = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -44,6 +45,9 @@ class VectorStoreSchemaConfig(BaseModel):
         description="The vector size to use.",
         default=DEFAULT_VECTOR_SIZE,
     )
+
+    # This is for supporting the Gemini embedding models TaskType.SEMANTIC_SIMILARITY input type.
+    task_type: str = Field(description="The task type to use.", default=DEFAULT_TASK_TYPE)
 
     index_name: str | None = Field(description="The index name to use.", default=None)
 

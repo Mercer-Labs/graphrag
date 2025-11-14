@@ -6,6 +6,8 @@
 import re
 from typing import Any, Mapping
 
+from networkx.classes.reportviews import NodeView
+
 
 # simple handling of placeholders in the description. TODO SUBU make this better.
 class NodeReferences:
@@ -64,7 +66,7 @@ class NodeReferences:
 
     @staticmethod
     def hydrate_node_references(
-        text: str, node_map: Mapping[str, Any], title_key: str = "title"
+        text: str, node_map: NodeView, title_key: str = "title"
     ) -> str:
         """Hydrate node references with node titles to get raw text.
         
