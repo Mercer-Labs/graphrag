@@ -15,6 +15,7 @@ class SystemAttributes:
     SYSTEM_PREFIX = "_sys_"
     RAW = SYSTEM_PREFIX + "raw"
     CANONICAL = SYSTEM_PREFIX + "canonical"
+    SYSTEM = SYSTEM_PREFIX + "system"
 
 # POST-PREP NODE TABLE SCHEMA
 NODE_DEGREE = "degree"

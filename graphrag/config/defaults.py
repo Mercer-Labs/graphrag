@@ -213,6 +213,15 @@ class ExtractGraphDefaults:
 
 
 @dataclass
+class CanonicalizeEntityDefaults:
+    """Default values for canonicalizing entities."""
+
+    prompt: None = None
+    strategy: None = None
+    model_id: str = DEFAULT_CHAT_MODEL_ID
+
+
+@dataclass
 class TextAnalyzerDefaults:
     """Default values for text analyzer."""
 
@@ -455,6 +464,9 @@ class GraphRagConfigDefaults:
     extract_graph: ExtractGraphDefaults = field(default_factory=ExtractGraphDefaults)
     extract_graph_nlp: ExtractGraphNLPDefaults = field(
         default_factory=ExtractGraphNLPDefaults
+    )
+    canonicalize_entity: CanonicalizeEntityDefaults = field(
+        default_factory=CanonicalizeEntityDefaults
     )
     summarize_descriptions: SummarizeDescriptionsDefaults = field(
         default_factory=SummarizeDescriptionsDefaults

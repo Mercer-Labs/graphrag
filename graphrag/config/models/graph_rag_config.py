@@ -15,6 +15,7 @@ from graphrag.config.enums import VectorStoreType
 from graphrag.config.errors import LanguageModelConfigMissingError
 from graphrag.config.models.basic_search_config import BasicSearchConfig
 from graphrag.config.models.cache_config import CacheConfig
+from graphrag.config.models.canonicalize_entity_config import CanonicalizeEntityConfig
 from graphrag.config.models.chunking_config import ChunkingConfig
 from graphrag.config.models.cluster_graph_config import ClusterGraphConfig
 from graphrag.config.models.community_reports_config import CommunityReportsConfig
@@ -262,6 +263,12 @@ class GraphRagConfig(BaseModel):
         default=ExtractGraphConfig(),
     )
     """The entity extraction configuration to use."""
+
+    canonicalize_entity: CanonicalizeEntityConfig = Field(
+        description="The entity canonicalization configuration to use.",
+        default=CanonicalizeEntityConfig(),
+    )
+    """The entity canonicalization configuration to use."""
 
     summarize_descriptions: SummarizeDescriptionsConfig = Field(
         description="The description summarization configuration to use.",

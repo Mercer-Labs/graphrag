@@ -4,6 +4,7 @@
 """A module containing run_workflow method definition."""
 
 import logging
+import re
 from typing import Any
 
 import pandas as pd
@@ -57,6 +58,13 @@ async def run_workflow(
         config.root_dir, summarization_llm_settings
     )
 
+    canonicalize_entity_llm_settings = config.get_language_model_config(
+        config.canonicalize_entity.model_id
+    )
+    canonicalize_entity_strategy = config.canonicalize_entity.resolved_strategy(
+        config.root_dir, canonicalize_entity_llm_settings
+    )
+
     raw_entities, raw_relationships = await extract_raw_graph(
         text_units=text_units,
         callbacks=context.callbacks,
@@ -78,8 +86,8 @@ async def run_workflow(
     )
 
     if config.snapshots.raw_graph:
-        await write_table_to_storage(raw_entities.drop(columns=["embedding"]), "raw_entities", context.output_storage)
-        await write_table_to_storage(raw_relationships.drop(columns=["embedding"]), "raw_relationships", context.output_storage)
+        await write_table_to_storage(raw_entities.drop(columns=["title_SS_embedding"]), "raw_entities", context.output_storage)
+        await write_table_to_storage(raw_relationships.drop(columns=["text_description_SS_embedding"]), "raw_relationships", context.output_storage)
 
     entities, relationships = await process_raw_graph(
         raw_entities=raw_entities,
@@ -89,6 +97,7 @@ async def run_workflow(
         summarization_strategy=summarization_strategy,
         summarization_num_threads=summarization_llm_settings.concurrent_requests,
         text_embed_config_strategy=text_embed_config_strategy,
+        canonicalize_entity_strategy=canonicalize_entity_strategy,
     )
 
     await write_table_to_storage(entities, "entities", context.output_storage)
@@ -149,7 +158,7 @@ async def preprocess_raw_graph(
     """All the steps to preprocess the raw graph."""
 
     #Embed raw entities and relationships
-    raw_entities["embedding"] = await embed_text(
+    raw_entities["title_SS_embedding"] = await embed_text(
         input=raw_entities.loc[:, ["id", "title"]],
         callbacks=callbacks,
         cache=cache,
@@ -157,7 +166,7 @@ async def preprocess_raw_graph(
         embed_column="title",
         strategy=text_embed_config_strategy,
     )
-    raw_relationships["embedding"] = await embed_text(
+    raw_relationships["text_description_SS_embedding"] = await embed_text(
         input=raw_relationships.loc[:, ["key", "text_description"]],
         callbacks=callbacks,
         cache=cache,
@@ -166,6 +175,13 @@ async def preprocess_raw_graph(
         embed_column="text_description",
         strategy=text_embed_config_strategy,
     )
+    # add short ids
+    raw_entities.reset_index(inplace=True)
+    raw_entities["human_readable_id"] = raw_entities.index
+
+    raw_relationships.reset_index(inplace=True)
+    raw_relationships["human_readable_id"] = raw_relationships.index
+    
     return (raw_entities, raw_relationships)
 
 async def process_raw_graph(
@@ -174,6 +190,7 @@ async def process_raw_graph(
     callbacks: WorkflowCallbacks,
     cache: PipelineCache,
     text_embed_config_strategy: dict,
+    canonicalize_entity_strategy: dict,
     summarization_strategy: dict[str, Any] | None = None,
     summarization_num_threads: int = 4,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -182,6 +199,8 @@ async def process_raw_graph(
         entities=raw_entities,
         relationships=raw_relationships,
         text_embed_config_strategy=text_embed_config_strategy,
+        canonicalize_entity_strategy=canonicalize_entity_strategy,
+        cache=cache,
     )
     
     entities, relationships = await get_summarized_entities_relationships(
@@ -199,12 +218,24 @@ async def canonicalize_graph(
     entities: pd.DataFrame,
     relationships: pd.DataFrame,
     text_embed_config_strategy: dict,
+    canonicalize_entity_strategy: dict,
+    cache: PipelineCache,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Canonicalize the graph.
     """
-    canonical_entities = canonicalize_entities(entities, relationships, pd.DataFrame(), pd.DataFrame(), text_embed_config_strategy)
-    canonical_relationships = canonicalize_relationships(relationships)
+    canonical_entities = await canonicalize_entities(
+        raw_entities=entities,
+        raw_relationships=relationships,
+        known_identities=pd.DataFrame(),
+        known_relationships=pd.DataFrame(), 
+        text_embed_config_strategy=text_embed_config_strategy,
+        canonicalization_strategy=canonicalize_entity_strategy,
+        cache=cache,
+    )
+    canonical_relationships = await canonicalize_relationships(
+        raw_relationships=relationships
+    )
     return (canonical_entities, canonical_relationships)
 
 

@@ -9,6 +9,7 @@ from typing import Any
 from graphrag.data_model.named import Named
 
 
+# TODO SUBU the data model is used only in the query path today - we should probably use it in the index path as well.
 @dataclass
 class Entity(Named):
     """A protocol for an entity in the system."""

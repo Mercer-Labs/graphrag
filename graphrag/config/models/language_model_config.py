@@ -353,7 +353,7 @@ class LanguageModelConfig(BaseModel):
         default=language_model_defaults.max_completion_tokens,
     )
     reasoning_effort: str | None = Field(
-        description="Level of effort OpenAI reasoning models should expend. Supported options are 'low', 'medium', 'high'; and OAI defaults to 'medium'.",
+        description="Level of effort OpenAI reasoning models should expend. Supported options are 'none' 'low', 'medium', 'high'; and OAI defaults to 'medium'.",
         default=language_model_defaults.reasoning_effort,
     )
     top_p: float = Field(

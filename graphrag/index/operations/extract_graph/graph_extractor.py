@@ -201,7 +201,7 @@ class GraphExtractor:
                 entity_title = clean_str(entity.name)
                 entity_type = clean_str(entity.type)
                 entity_id = clean_str(entity.id)
-                entity_attributes = set([clean_str(attribute) for attribute in entity.attributes])
+                entity_attributes = [clean_str(attribute) for attribute in entity.attributes]
                 
                 if entity_id in entity_key_map:
                     merge = True
@@ -219,7 +219,7 @@ class GraphExtractor:
                     if node["llm_inferred_type"] != entity_type:
                         logger.warning(f"Entity type mismatch: {node['llm_inferred_type']} != {entity_type} for entity {entity_id}")
                         node["llm_inferred_type"] = entity_type if len(entity_type) > len(node["llm_inferred_type"]) else node["llm_inferred_type"]
-                    node["attributes"].update(entity_attributes)
+                    node["attributes"]= list(set(node["attributes"] + entity_attributes))
                 else:
                     graph.add_node(
                         unique_entity_id,
@@ -229,11 +229,28 @@ class GraphExtractor:
                         is_proper_noun=entity.is_proper_noun,
                     )
             for relationship in response.relationships:
-                if relationship.source not in entity_key_map or relationship.target not in entity_key_map:
-                    # TODO SUBU - reprocessing pipeline: handle missing edge links better
-                    logger.warning(f"Error processing document text: {text}: Source or target entity not found: {relationship.source} \
-                        or {relationship.target}. Skipping relationship {relationship}")
-                    continue
+                # Turns out gemini 2.5 gives out a bunch of relationships that don't have entities defined above ... 
+                # TODO SUBU maybe just get relationships? OR Get relationships first and then entities?
+                if relationship.source not in entity_key_map:
+                    entity_key_map[relationship.source] = uuid7().hex
+                    unique_entity_id = entity_key_map[relationship.source]
+                    graph.add_node(
+                        unique_entity_id,
+                        title=relationship.source,
+                        llm_inferred_type="ENTITY",
+                        attributes=[],
+                        is_proper_noun=False,
+                    )
+                if relationship.target not in entity_key_map:
+                    entity_key_map[relationship.target] = uuid7().hex
+                    unique_entity_id = entity_key_map[relationship.target]
+                    graph.add_node(
+                        unique_entity_id,
+                        title=relationship.target,
+                        llm_inferred_type="ENTITY",
+                        attributes=[],
+                        is_proper_noun=False,
+                    )
                 source_entity_id = entity_key_map[relationship.source]
                 target_entity_id = entity_key_map[relationship.target]
 
