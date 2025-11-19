@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 async def run_graph_intelligence(
     id: str,
     title: str,
-    attributes: dict[str, Any] | None,
+    attributes: list[str] | None,
     relationship_descriptions: list[str],
     candidate_map: dict[str, dict[str, Any]],
     cache: PipelineCache,
@@ -30,6 +30,7 @@ async def run_graph_intelligence(
 ) -> CanonicalizationLLMResult:
     """Run the graph intelligence entity canonicalization strategy."""
     llm_config = LanguageModelConfig(**args["llm"])
+    max_input_tokens = args["max_input_tokens"]
     llm = ModelManager().get_or_create_chat_model(
         name="canonicalize_entities",
         model_type=llm_config.type,
@@ -44,6 +45,7 @@ async def run_graph_intelligence(
         attributes,
         relationship_descriptions,
         candidate_map,
+        max_input_tokens,
         args,
     )
 
@@ -52,9 +54,10 @@ async def run_canonicalize_entity(
     model: ChatModel,
     id: str,
     title: str, 
-    attributes: dict[str, Any] | None,
+    attributes: list[str] | None,
     relationship_descriptions: list[str],
     candidate_map: dict[str, dict[str, Any]],
+    max_input_tokens: int,
     args: StrategyConfig,
 ) -> CanonicalizationLLMResult:
     """Run the entity canonicalization chain."""
@@ -62,6 +65,7 @@ async def run_canonicalize_entity(
     extractor = CanonicalEntityExtractor(
         model_invoker=model,
         canonicalization_prompt=canonicalization_prompt,
+        max_input_tokens=max_input_tokens,
         on_error=lambda e, stack, details: logger.error(
             "Entity Canonicalization Error",
             exc_info=e,

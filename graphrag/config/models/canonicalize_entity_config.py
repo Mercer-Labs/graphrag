@@ -18,6 +18,11 @@ class CanonicalizeEntityConfig(BaseModel):
         description="The entity canonicalization prompt to use.",
         default=graphrag_config_defaults.canonicalize_entity.prompt,
     )
+
+    max_input_tokens: int = Field(
+        description="The maximum number of input tokens for the canonicalization prompt.",
+        default=graphrag_config_defaults.canonicalize_entity.max_input_tokens,
+    )
     strategy: dict | None = Field(
         description="Override the default entity canonicalization strategy",
         default=graphrag_config_defaults.canonicalize_entity.strategy,
@@ -43,5 +48,6 @@ class CanonicalizeEntityConfig(BaseModel):
             )
             if self.prompt
             else None,
+            "max_input_tokens": self.max_input_tokens,
         }
 

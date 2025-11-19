@@ -217,6 +217,7 @@ class CanonicalizeEntityDefaults:
     """Default values for canonicalizing entities."""
 
     prompt: None = None
+    max_input_tokens: int = 4_000
     strategy: None = None
     model_id: str = DEFAULT_CHAT_MODEL_ID
 
@@ -399,6 +400,7 @@ class SnapshotsDefaults:
     embeddings: bool = False
     graphml: bool = False
     raw_graph: bool = False
+    canonical_graph: bool = False
 
 
 @dataclass

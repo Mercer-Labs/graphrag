@@ -17,6 +17,11 @@ class SystemAttributes:
     CANONICAL = SYSTEM_PREFIX + "canonical"
     SYSTEM = SYSTEM_PREFIX + "system"
 
+class RelationshipType:
+    RELATES_TO = "relates_to" # most common relationship type.
+    PARTIAL_MATCH = "partial_match" # we have checked with LLM and got a partial match.
+    NO_MATCH = "no_match" # we have checked with LLM and got no match. These are two different entities.
+
 # POST-PREP NODE TABLE SCHEMA
 NODE_DEGREE = "degree"
 NODE_FREQUENCY = "frequency"

@@ -3,7 +3,6 @@
 
 """A module containing the canonicalize_entities verb."""
 
-import logging
 from dataclasses import dataclass
 from typing import Any, Tuple
 
@@ -16,7 +15,6 @@ from graphrag.index.operations.canonicalize_entity.typing import (
     CanonicalizeStrategyType,
 )
 
-logger = logging.getLogger(__name__)
 
 # TODO SUBU: merge this with Entity in data_model.entity.py
 @dataclass
@@ -24,8 +22,7 @@ class CE_EntityHolder:
     id: str
     is_raw: bool
     title: str
-    title_SS_embedding: list[float]
-    metadata: dict[str, Any]
+    attributes: list[str]
     relationships: list[str]
 
 
@@ -46,7 +43,6 @@ async def canonicalize_entity(
     Returns:
         CanonicalizationResult with the canonical entity ID(s).
     """
-    logger.debug("canonicalize_entity strategy=%s", strategy)
     strategy = strategy or {}
     strategy_exec = load_strategy(
         strategy.get("type", CanonicalizeStrategyType.graph_intelligence)
@@ -65,20 +61,26 @@ async def canonicalize_entity(
         **{entity_id_map_inv[k]: v for k, v in candidates.items()},
     }
 
+    candidate_map = {} # ideally a 5x5 map of candidates and their relationships
+    if len(candidates) > 5:
+        pass # TODO SUBU Figure out closest candidates from the ones with most similar edges rather than sending all.
 
-    candidate_map = {}
     for k, ch_entity in candidates.items():
+        rels = ch_entity.relationships
+        if len(rels) > 5:
+            pass # TODO SUBU Figure out closest relationships from raw backing edges rather than sending all.
         candidate_map[entity_id_map_inv[k]] = {
             "id": entity_id_map_inv[k],
             "title": ch_entity.title,
-            "attributes": ch_entity.metadata["attributes"],
-            "relationship_descriptions": ch_entity.relationships
+            "attributes": ch_entity.attributes,
+            "relationship_descriptions": rels,
         }
+
     # Call the strategy to canonicalize the entity
     llm_result = await strategy_exec(
         "0",
         r_entity.title,
-        r_entity.metadata["attributes"],
+        r_entity.attributes,
         r_entity.relationships,
         candidate_map,
         cache,
@@ -92,6 +94,7 @@ async def canonicalize_entity(
         canonical_entities={entity_id_map[e.id]: {
             "entity": entity_map[e.id],
             "confidence": e.confidence,
+            "match_type": e.match_type,
             "reasoning": e.reasoning,
         } for e in llm_result.canonical_entities},
     )

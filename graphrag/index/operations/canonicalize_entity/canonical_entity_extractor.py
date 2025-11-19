@@ -16,6 +16,7 @@ from graphrag.index.operations.canonicalize_entity.typing import (
 from graphrag.index.typing.error_handler import ErrorHandlerFn
 from graphrag.language_model.protocol.base import ChatModel
 from graphrag.prompts.index.canonicalize_entities import CANONICALIZE_ENTITY_PROMPT
+from graphrag.tokenizer.get_tokenizer import get_tokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +34,14 @@ class CanonicalEntityExtractor:
     def __init__(
         self,
         model_invoker: ChatModel,
+        max_input_tokens: int,
         canonicalization_prompt: str | None = None,
         on_error: ErrorHandlerFn | None = None,
     ):
         """Init method definition."""
         self._model = model_invoker
+        self._max_input_tokens = max_input_tokens
+        self._tokenizer = get_tokenizer(model_invoker.config)
         self._canonicalization_prompt = canonicalization_prompt or CANONICALIZE_ENTITY_PROMPT
         self._on_error = on_error or (lambda _e, _s, _d: None)
 
@@ -45,7 +49,7 @@ class CanonicalEntityExtractor:
         self,
         id: str,
         title: str,
-        attributes: dict[str, Any] | None,
+        attributes: list[str] | None,
         relationship_descriptions: list[str],
         candidate_map: dict[str, dict[str, Any]],
     ) -> CanonicalizationLLMResult:
@@ -74,9 +78,14 @@ class CanonicalEntityExtractor:
         # Format the JSON as a string for the prompt
         input_json_str = json.dumps(input_json, ensure_ascii=False, indent=4)
 
+        prompt = self._canonicalization_prompt.format(**{INPUT_JSON_KEY: input_json_str})
+        prompt_tokens = self._tokenizer.num_tokens(prompt)
+        if prompt_tokens > self._max_input_tokens:
+            raise ValueError(f"Canonicalization Prompt is too long: {prompt_tokens} tokens > {self._max_input_tokens} tokens")
+
         # Call LLM to find the best match
         response = await self._model.achat(
-            self._canonicalization_prompt.format(**{INPUT_JSON_KEY: input_json_str}),
+            prompt,
             name="canonicalize_entity",
             json=True,
             json_model=CanonicalizationLLMResult,
@@ -104,7 +113,7 @@ class CanonicalEntityExtractor:
         self,
         id: str,
         title: str,
-        attributes: dict[str, Any] | None,
+        attributes: list[str] | None,
         relationship_descriptions: list[str],
         candidate_map: dict[str, dict[str, Any]],
     ) -> dict[str, Any]:
@@ -113,7 +122,7 @@ class CanonicalEntityExtractor:
         entity = {
             "id": id,
             "title": title,
-            "attributes": attributes or {},
+            "attributes": attributes or [],
             "relationship_descriptions": relationship_descriptions or [],
         }
 

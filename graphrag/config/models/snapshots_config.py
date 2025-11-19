@@ -23,3 +23,7 @@ class SnapshotsConfig(BaseModel):
         description="A flag indicating whether to take snapshots of the raw extracted graph (entities and relationships) before merging.",
         default=graphrag_config_defaults.snapshots.raw_graph,
     )
+    canonical_graph: bool = Field(
+        description="A flag indicating whether to take snapshots of the canonical graph (entities and relationships) after merging.",
+        default=graphrag_config_defaults.snapshots.canonical_graph,
+    )

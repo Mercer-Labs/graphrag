@@ -98,6 +98,8 @@ async def run_workflow(
         summarization_num_threads=summarization_llm_settings.concurrent_requests,
         text_embed_config_strategy=text_embed_config_strategy,
         canonicalize_entity_strategy=canonicalize_entity_strategy,
+        config=config,
+        context=context,
     )
 
     await write_table_to_storage(entities, "entities", context.output_storage)
@@ -191,6 +193,8 @@ async def process_raw_graph(
     cache: PipelineCache,
     text_embed_config_strategy: dict,
     canonicalize_entity_strategy: dict,
+    config: GraphRagConfig,
+    context: PipelineRunContext,
     summarization_strategy: dict[str, Any] | None = None,
     summarization_num_threads: int = 4,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -202,6 +206,10 @@ async def process_raw_graph(
         canonicalize_entity_strategy=canonicalize_entity_strategy,
         cache=cache,
     )
+    
+    if config.snapshots.canonical_graph:
+        await write_table_to_storage(canonical_entities, "canonical_entities", context.output_storage)
+        await write_table_to_storage(canonical_relationships, "canonical_relationships", context.output_storage)
     
     entities, relationships = await get_summarized_entities_relationships(
         extracted_entities=canonical_entities,
@@ -224,7 +232,7 @@ async def canonicalize_graph(
     """
     Canonicalize the graph.
     """
-    canonical_entities = await canonicalize_entities(
+    return await canonicalize_entities(
         raw_entities=entities,
         raw_relationships=relationships,
         known_identities=pd.DataFrame(),
@@ -233,10 +241,6 @@ async def canonicalize_graph(
         canonicalization_strategy=canonicalize_entity_strategy,
         cache=cache,
     )
-    canonical_relationships = await canonicalize_relationships(
-        raw_relationships=relationships
-    )
-    return (canonical_entities, canonical_relationships)
 
 
 async def get_summarized_entities_relationships(
