@@ -121,7 +121,7 @@ async def canonicalize_entities(
             source_id=row["source_id"],
             llm_inferred_type=row["llm_inferred_type"],
             node_type=row["node_type"],
-            attributes=row["attributes"],
+            attributes=set(row["attributes"] or []),
             human_readable_id=row["human_readable_id"],
         )
     
@@ -136,6 +136,7 @@ async def canonicalize_entities(
                 row["id"],
                 title=row["title"],
                 title_SS_embedding=row["title_SS_embedding"],
+                title_RD_embedding=row["title_RD_embedding"],
                 metadata=row["metadata"],
                 summary=row["summary"],
                 # TODO SUBU see if we need to keep a known identity list (if anything matches, it's a match)
@@ -161,6 +162,7 @@ async def canonicalize_entities(
     # embedding vectors for name searches.
     #
     # TODO SUBU PARALLELIZE the below.
+    # IMPORTANT: NX isn't threadsafe. - TODO SUBU handle it.
     #  we maintain a list of the prospects instead of directly creating canonical entities here. Because without canonical edges, these are
     #  not useful for context checks - will only confuse the LLM. We stash the entity holders for reuse.
     new_c_entity_prospects: dict[str, CE_EntityHolder] = {}
@@ -169,8 +171,6 @@ async def canonicalize_entities(
     for cluster, cluster_df in raw_entity_cluster_dfs.items():
         logger.debug(f"Processing cluster {cluster} with {len(cluster_df)} raw entities.")
         # nx is not threadsafe.
-        # TODO SUBU - remember this is NOT a deep copy / foolproof. You can still edit the nodes here...
-        c_graph_view = nx.subgraph_view(c_graph) 
         for _, row in cluster_df.iterrows():
             # -- start thread
             logger.debug(f"Processing raw entity {row['id']} in cluster {cluster}.")
@@ -207,7 +207,7 @@ async def canonicalize_entities(
             # canonical OR TO-BE-CANONICAL nodes. Can contain duplicates.
             chosen_canonical_entity_ids: dict[Tuple[str, bool], CE_EntityHolder] = {} # map of (id, is_raw) -> CE_EntityHolder
             for ce in candidate_c_e_list:
-                c_entity = c_graph_view.nodes[ce.document.id]
+                c_entity = c_graph.nodes[ce.document.id]
                 # canonical nodes have relationships that have only summaries.
                 # we want to ensure we catch all possible variants to ensure the match is good. So we figure the source raw entities and their relationships.
                 relationships = []
@@ -286,133 +286,144 @@ async def canonicalize_entities(
 
 
     # UPDATE system - create canonical entities and relationships (AFTER processing: outside the thread)
-    def get_canonical_entity_row_for_raw_entity(raw_id: str) -> dict[str, Any]:
+    def add_canonical_entity_node_for_raw_entity(raw_id: str) -> str:
         raw_entity_node = r_graph.nodes[raw_id]
-        return {
-            "id": uuid7().hex,
-            "title": raw_entity_node["title"],
-            "title_SS_embedding": raw_entity_node["title_SS_embedding"],
-            "metadata": {
+        ce_id = uuid7().hex
+        c_graph.add_node(
+            ce_id,
+            title=raw_entity_node["title"],
+            title_SS_embedding=raw_entity_node["title_SS_embedding"],
+            title_RD_embedding=[],
+            metadata={
                 "attributes": raw_entity_node["attributes"],
                 "node_type": SystemAttributes.CANONICAL,
             },
-            "summary": "", # summary is generated later.
-            "summary_RD_embedding": [],
-            "raw_entity_ids": [raw_id],
-        }
-    r_to_c_entity_map = {} # map of raw_id -> canonical_entity_id
+            summary="", # summary is generated later.
+            summary_RD_embedding=[],
+            raw_entity_ids=set([raw_id]),
+        )
+        # write to the vector store
+        title_embedding = raw_entity_node["title_SS_embedding"]
+        if type(title_embedding) is np.ndarray:
+            title_embedding = title_embedding.tolist()
+        c_entity_title_vs.load_documents([VectorStoreDocument(
+            id=ce_id,
+            text=raw_entity_node["title"],
+            vector=title_embedding,
+            attributes={"title": raw_entity_node["title"]}, # For some reason chroma is forcing this ... TODO SUBU FIX THIS
+        )])
+        return ce_id
+
+    r_to_c_entity_map = {} # map of raw_id -> set(canonical_entity_ids)
     # SINGLE THREADED NOW.
     # first pass to create canonical entities
     for raw_id, canonical_entity_map in raw_entity_to_canonical_entity_map.items():
-        if len(canonical_entity_map) == 1 and next(iter(canonical_entity_map.items()))[1] == False:
-            #single canonical candidate found
-            ce_id = next(iter(canonical_entity_map.keys()))[0]
-            # new HIERARCHY RELATIONSHIP from the raw entity
-            ce_node = c_graph_view.nodes[ce_id]
-            ce_node["raw_entity_ids"] = list(set(ce_node["raw_entity_ids"] + [raw_id]))
-            # TODO SUBU improve this: For now we simplistically merge attributes. There can be unnecessary stuff like former/latter in there.
-            ce_node["attributes"] = list(set(ce_node["attributes"] + raw_entity_map[raw_id].metadata["attributes"]))
-        else:
-            # we either have one raw entity candidate OR multiple ambiguous candidates.
-            # Options (CHOSEN 2 for now):
-            # 1. add ambiguous relationship from the raw entity to the canonical entities + confidence (This means the canonical relationships will need 
-            # to be replicated to all of those ... and cleaned up as we disambiguate.)
-            # 2. add a new canonical entity and add MAYBE_SAME_AS relationships to the chosen ones. This means we proliferate # of nodes 
-            # -- more relationships than nodes. Easier to find clumps of ambiguous nodes.
-            # -- can leave the node management to be the same process that merges duplicate canonical entities from parallel runs.
-            # -- BUT confuses that process aswell: Parallel run dupes HAVE to be resolved (and probably can be because we haven't canonicalized across
-            # the runs yet). We probably have no new information about this entity to help ... 
-            # -- FWIW parallel runs are today based on vector k-means clustering. This means nodes from same document can be spread out.
-            # --- BUT we are ok with this because new info could be doc comments, threads in the same channel or by same person / team etc ... it will get
-            # disambiguated over time (or no one will care). Better to have a single disambiguation process than multiple semi-related ones.
-            ce_row = get_canonical_entity_row_for_raw_entity(raw_id)
-            ce_id = ce_row["id"]
-            c_graph.add_node(
-                ce_id,
-                title=ce_row["title"],
-                title_SS_embedding=ce_row["title_SS_embedding"],
-                metadata=ce_row["metadata"],
-                summary=ce_row["summary"],
-                summary_RD_embedding=ce_row["summary_RD_embedding"],
-                raw_entity_ids=ce_row["raw_entity_ids"],
-            )
-            # write to the vector store
-            title_embedding = ce_row["title_SS_embedding"]
-            if type(title_embedding) is np.ndarray:
-                title_embedding = title_embedding.tolist()
-            c_entity_title_vs.load_documents([VectorStoreDocument(
-                id=ce_row["id"],
-                text=ce_row["title"],
-                vector=title_embedding,
-                attributes={"title": ce_row["title"]}, # For some reason chroma is forcing this ... TODO SUBU FIX THIS
-            )])
+        # If there are exact matches to canonical entities, we add the raw entity to them.
+        # If there are exact matches to prospects, we create new canonical entities for the prospects if necessary and add the raw entity to them.
+        # if there are partial / no matches, we create a new canonical entity for the raw entity.
+        for (c_r_id, is_raw), llm_result in canonical_entity_map.items():
+            if is_raw:
+                if c_r_id in r_to_c_entity_map:
+                    c_ce_ids = r_to_c_entity_map[c_r_id]
+                else:
+                    c_ce_ids = {add_canonical_entity_node_for_raw_entity(c_r_id)}
+                    r_to_c_entity_map[c_r_id] = c_ce_ids
+            else:
+                c_ce_ids = {c_r_id}
 
-        r_to_c_entity_map[raw_id] = ce_id
+            if llm_result["match_type"] == MatchType.EXACT:
+                # new HIERARCHY RELATIONSHIP from the raw entity - the set operations will ensure we don't add duplicates.
+                for ce_id in c_ce_ids:
+                    ce_node = c_graph.nodes[ce_id]
+                    raw_node = r_graph.nodes[raw_id]
+                    ce_node["raw_entity_ids"] |= {raw_id}
+                    # TODO SUBU improve this: For now we simplistically merge attributes. There can be unnecessary stuff like former/latter in there.
+                    ce_node["metadata"]["attributes"] |= raw_node["attributes"]
+                r_to_c_entity_map[raw_id] = r_to_c_entity_map.get(raw_id, set()) | c_ce_ids
+
+        # if after the above - we don't have a canonical entity for the raw entity, we create a new one.
+        if raw_id not in r_to_c_entity_map:
+            ce_id = add_canonical_entity_node_for_raw_entity(raw_id)
+            r_to_c_entity_map[raw_id] = {ce_id}
+
+        assert raw_id in r_to_c_entity_map, f"Raw entity {raw_id} does not have a canonical entity after the first pass."
 
     # second pass to canonicalize relationships from raw - now we have CE setup for all RE.
     # TODO SUBU Think about normalization(building known edge types) vs vector similarity matching (the current plan).
-    for raw_id, ce_id in r_to_c_entity_map.items():
+    for raw_id in r_to_c_entity_map.keys():
         for edge in r_graph.edges(raw_id, data=True):
-            source_ce = r_to_c_entity_map[edge[0]]
-            target_ce = r_to_c_entity_map[edge[1]]
-            if c_graph.has_edge(source_ce, target_ce):
-                # NOTE: canonical descriptions get summarized periodically. For now we just put a marker
-                c_graph.edges[source_ce, target_ce]["metadata"]["canonical_summary_pending"] = True 
-                c_graph.edges[source_ce, target_ce]["weight"] += edge[2]["weight"]
-            else:
-                c_graph.add_edge(
-                    source_ce,
-                    target_ce,
-                    weight=edge[2]["weight"],
-                    metadata={
-                        "edge_type": SystemAttributes.CANONICAL,
-                        "relationship_type": RelationshipType.RELATES_TO,
-                        "canonical_summary_pending": True,
-                        "last_summary_timestamp": 0,
-                    },
-                    canonical_summary="",
-                    raw_descriptions=[],
-                    canonical_summary_RD_embedding=[], # needs to be filled in later in generate embeddings step.
-                )
+            source_ce_ids = r_to_c_entity_map[edge[0]]
+            target_ce_ids = r_to_c_entity_map[edge[1]]
+            # do the cartesian connection for all source and target canonical entities.
+            # This seems weird - but will force the later node merges to happen.
+            for source_ce_id in source_ce_ids:
+                for target_ce_id in target_ce_ids:
+                    if c_graph.has_edge(source_ce_id, target_ce_id):
+                        c_graph.edges[source_ce_id, target_ce_id]["metadata"]["canonical_summary_pending"] = True 
+                        c_graph.edges[source_ce_id, target_ce_id]["weight"] += edge[2]["weight"]
+                        c_graph.edges[source_ce_id, target_ce_id]["canonical_summary"] = "\n".join([c_graph.edges[source_ce_id, target_ce_id]["canonical_summary"], edge[2]["text_description"]])
+                    else:
+                        c_graph.add_edge(
+                            source_ce_id,
+                            target_ce_id,
+                            weight=edge[2]["weight"],
+                            metadata={
+                                "edge_type": SystemAttributes.CANONICAL,
+                                "relationship_type": RelationshipType.RELATES_TO,
+                                "canonical_summary_pending": True,
+                                "last_summary_timestamp": 0,
+                            },
+                            canonical_summary=edge[2]["text_description"],
+                            canonical_summary_RD_embedding=[], # needs to be filled in later in generate embeddings step.
+                        )
     # save partial match info
     for raw_id, canonical_entity_map in raw_entity_to_canonical_entity_map.items():
-        ce_id = r_to_c_entity_map[raw_id]
+        ce_ids = r_to_c_entity_map[raw_id]
         for (c_r_id, is_raw), llm_result in canonical_entity_map.items():
             if is_raw:
-                c_ce_id = r_to_c_entity_map[c_r_id]
+                c_ce_ids = r_to_c_entity_map[c_r_id]
             else:
-                c_ce_id = c_r_id
-            if llm_result["match_type"] != MatchType.PARTIAL:
-                c_graph.add_edge(
-                    ce_id,
-                    c_ce_id,
-                    weight=1.0,
-                    metadata={
-                        "edge_type": SystemAttributes.CANONICAL,
-                        "relationship_type": RelationshipType.PARTIAL_MATCH,
-                        "confidence": llm_result["confidence"],
-                        "reasoning": llm_result["reasoning"],
-                        "canonical_summary_pending": True,
-                        "last_summary_timestamp": 0,
-                    },
-                )
+                c_ce_ids = {c_r_id}
+            if llm_result["match_type"] == MatchType.PARTIAL:
+                for ce_id in ce_ids:
+                    for c_ce_id in c_ce_ids:
+                        c_graph.add_edge(
+                            ce_id,
+                            c_ce_id,
+                            weight=1.0,
+                            metadata={
+                                "edge_type": SystemAttributes.CANONICAL,
+                                "relationship_type": RelationshipType.PARTIAL_MATCH,
+                                "confidence": llm_result["confidence"],
+                                "reasoning": llm_result["reasoning"],
+                            },
+                        )
             elif llm_result["match_type"] == MatchType.NONE:
-                c_graph.add_edge(
-                    ce_id,
-                    c_ce_id,
-                    weight=1.0,
-                    metadata={
-                        "edge_type": SystemAttributes.CANONICAL,
-                        "relationship_type": RelationshipType.NO_MATCH,
-                        "reasoning": llm_result["reasoning"],
-                    },
-                )
+                for ce_id in ce_ids:
+                    for c_ce_id in c_ce_ids:
+                        c_graph.add_edge(
+                            ce_id,
+                            c_ce_id,
+                            weight=1.0,
+                            metadata={
+                                "edge_type": SystemAttributes.CANONICAL,
+                                "relationship_type": RelationshipType.NO_MATCH,
+                                "reasoning": llm_result["reasoning"],
+                            },
+                        )
 
     canonical_entities = pd.DataFrame([
         ({"id": item[0], **(item[1] or {})})
         for item in c_graph.nodes(data=True)
         if item is not None
     ])
+
+    # json can't handle sets ... dataframe can't handle sets ...
+    def attributes_set_to_list(x):
+        if "attributes" in x and isinstance(x["attributes"], set):
+            x["attributes"] = list(x["attributes"])
+        return x
+    canonical_entities["metadata"] = canonical_entities["metadata"].apply(attributes_set_to_list)
     canonical_relationships = pd.DataFrame(nx.to_pandas_edgelist(c_graph, edge_key="key"))
 
     return canonical_entities, canonical_relationships

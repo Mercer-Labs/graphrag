@@ -49,7 +49,7 @@ class CanonicalEntityExtractor:
         self,
         id: str,
         title: str,
-        attributes: list[str] | None,
+        attributes: set[str] | None,
         relationship_descriptions: list[str],
         candidate_map: dict[str, dict[str, Any]],
     ) -> CanonicalizationLLMResult:
@@ -113,7 +113,7 @@ class CanonicalEntityExtractor:
         self,
         id: str,
         title: str,
-        attributes: list[str] | None,
+        attributes: set[str] | None,
         relationship_descriptions: list[str],
         candidate_map: dict[str, dict[str, Any]],
     ) -> dict[str, Any]:
@@ -122,7 +122,7 @@ class CanonicalEntityExtractor:
         entity = {
             "id": id,
             "title": title,
-            "attributes": attributes or [],
+            "attributes": list(attributes or []),
             "relationship_descriptions": relationship_descriptions or [],
         }
 

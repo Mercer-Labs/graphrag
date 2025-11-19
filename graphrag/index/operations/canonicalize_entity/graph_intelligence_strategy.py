@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 async def run_graph_intelligence(
     id: str,
     title: str,
-    attributes: list[str] | None,
+    attributes: set[str] | None,
     relationship_descriptions: list[str],
     candidate_map: dict[str, dict[str, Any]],
     cache: PipelineCache,
@@ -54,7 +54,7 @@ async def run_canonicalize_entity(
     model: ChatModel,
     id: str,
     title: str, 
-    attributes: list[str] | None,
+    attributes: set[str] | None,
     relationship_descriptions: list[str],
     candidate_map: dict[str, dict[str, Any]],
     max_input_tokens: int,

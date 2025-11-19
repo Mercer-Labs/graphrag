@@ -208,8 +208,8 @@ async def process_raw_graph(
     )
     
     if config.snapshots.canonical_graph:
-        await write_table_to_storage(canonical_entities, "canonical_entities", context.output_storage)
-        await write_table_to_storage(canonical_relationships, "canonical_relationships", context.output_storage)
+        await write_table_to_storage(canonical_entities.drop(columns=["title_SS_embedding", "title_RD_embedding", "summary_RD_embedding"]), "canonical_entities", context.output_storage)
+        await write_table_to_storage(canonical_relationships.drop(columns=["canonical_summary_RD_embedding"]), "canonical_relationships", context.output_storage)
     
     entities, relationships = await get_summarized_entities_relationships(
         extracted_entities=canonical_entities,

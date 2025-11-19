@@ -48,7 +48,7 @@ CanonicalizationStrategy = Callable[
     [
         str,  # current_entity_id
         str,  # current_entity_title
-        list[str] | None,  # current_entity_attributes
+        set[str] | None,  # current_entity_attributes
         list[str],  # relationship_descriptions
         dict[str, dict[str, Any]],  # candidate_map (map of candidate ID to dict with id, title, attributes, relationship_descriptions)
         PipelineCache,

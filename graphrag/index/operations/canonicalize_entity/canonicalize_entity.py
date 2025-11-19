@@ -22,7 +22,7 @@ class CE_EntityHolder:
     id: str
     is_raw: bool
     title: str
-    attributes: list[str]
+    attributes: set[str]
     relationships: list[str]
 
 
@@ -72,7 +72,7 @@ async def canonicalize_entity(
         candidate_map[entity_id_map_inv[k]] = {
             "id": entity_id_map_inv[k],
             "title": ch_entity.title,
-            "attributes": ch_entity.attributes,
+            "attributes": list(ch_entity.attributes or []),
             "relationship_descriptions": rels,
         }
 
