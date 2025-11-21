@@ -310,6 +310,20 @@ class InputDefaults:
     text_column: str = "text"
     title_column: None = None
     metadata: None = None
+    
+
+@dataclass
+class MLFlowDefaults:
+    """Default values for MLflow."""
+    enabled: bool = False
+    tracking_uri: str = "sqlite:///mlflow.db"
+    experiment_name: str = "graphrag_default"
+
+
+@dataclass
+class DebugDefaults:
+    """Default values for debug."""
+    mlflow: MLFlowDefaults = field(default_factory=MLFlowDefaults)
 
 
 @dataclass
@@ -449,6 +463,7 @@ class GraphRagConfigDefaults:
     """Default values for GraphRAG."""
 
     root_dir: str = ""
+    debug: DebugDefaults = field(default_factory=DebugDefaults)
     models: dict = field(default_factory=dict)
     reporting: ReportingDefaults = field(default_factory=ReportingDefaults)
     storage: StorageDefaults = field(default_factory=StorageDefaults)
@@ -489,7 +504,7 @@ class GraphRagConfigDefaults:
     )
     workflows: None = None
 
-
+mlflow_defaults = MLFlowDefaults()
 language_model_defaults = LanguageModelDefaults()
 vector_store_defaults = VectorStoreDefaults()
 graphrag_config_defaults = GraphRagConfigDefaults()

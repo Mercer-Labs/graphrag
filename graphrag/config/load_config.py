@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 
 from graphrag.config.create_graphrag_config import create_graphrag_config
 from graphrag.config.models.graph_rag_config import GraphRagConfig
+from graphrag.config.models.mlflow_config import MLFlowConfig
 
 _default_config_files = ["settings.yaml", "settings.yml", "settings.json"]
 
@@ -188,4 +189,22 @@ def load_config(
     config_data = _parse(config_extension, config_text)
     if cli_overrides:
         _apply_overrides(config_data, cli_overrides)
-    return create_graphrag_config(config_data, root_dir=str(root))
+    config = create_graphrag_config(config_data, root_dir=str(root))
+    
+    # This probably needs to be in a better spot - but doing it here as the entry point for everything else.
+    enable_mlflow(config)
+    return config
+
+
+def enable_mlflow(config: GraphRagConfig) -> None:
+    mlflow_config: MLFlowConfig = config.debug.mlflow
+    """Enable MLflow tracking."""
+    if mlflow_config.enabled:
+        # without this, mlflow ruins logger setup in graphrag.
+        os.environ["MLFLOW_CONFIGURE_LOGGING"] = "False"
+        import mlflow
+
+        mlflow.set_tracking_uri(mlflow_config.tracking_uri)
+        mlflow.set_experiment(mlflow_config.experiment_name)
+        import mlflow.litellm as mlflow_litellm
+        mlflow_litellm.autolog()

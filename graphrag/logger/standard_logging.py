@@ -37,9 +37,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from graphrag.logger.factory import (
-    LoggerFactory,
-)
+from graphrag.logger.factory import LoggerFactory
 
 if TYPE_CHECKING:
     from graphrag.config.models.graph_rag_config import GraphRagConfig
@@ -81,3 +79,4 @@ def init_loggers(
 
     handler = LoggerFactory.create_logger(reporting_config.type, args)
     logger.addHandler(handler)
+    logger.propagate = False # prevent logging from being propagated to the root logger - else things like MLFlow seem to cause logging to stderr as well as they enable their own logging.

@@ -38,6 +38,7 @@ from graphrag.config.models.summarize_descriptions_config import (
 from graphrag.config.models.text_embedding_config import TextEmbeddingConfig
 from graphrag.config.models.umap_config import UmapConfig
 from graphrag.config.models.vector_store_config import VectorStoreConfig
+from graphrag.config.models.debug_config import DebugConfig
 from graphrag.language_model.providers.litellm.services.rate_limiter.rate_limiter_factory import (
     RateLimiterFactory,
 )
@@ -73,6 +74,11 @@ class GraphRagConfig(BaseModel):
             raise FileNotFoundError(msg)
         self.root_dir = str(root_dir)
 
+    debug: DebugConfig = Field(
+        description="The debug configuration.", 
+        default=DebugConfig(**asdict(graphrag_config_defaults.debug)),
+    )
+    
     models: dict[str, LanguageModelConfig] = Field(
         description="Available language model configurations.",
         default=graphrag_config_defaults.models,
