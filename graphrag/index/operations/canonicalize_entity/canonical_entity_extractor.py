@@ -49,6 +49,7 @@ class CanonicalEntityExtractor:
         self,
         id: str,
         title: str,
+        type: str,
         attributes: set[str] | None,
         relationship_descriptions: list[str],
         candidate_map: dict[str, dict[str, Any]],
@@ -70,6 +71,7 @@ class CanonicalEntityExtractor:
         input_json = self._build_input_json(
             id=id,
             title=title,
+            type=type,
             attributes=attributes,
             relationship_descriptions=relationship_descriptions,
             candidate_map=candidate_map,
@@ -113,6 +115,7 @@ class CanonicalEntityExtractor:
         self,
         id: str,
         title: str,
+        type: str,
         attributes: set[str] | None,
         relationship_descriptions: list[str],
         candidate_map: dict[str, dict[str, Any]],
@@ -122,6 +125,7 @@ class CanonicalEntityExtractor:
         entity = {
             "id": id,
             "title": title,
+            "type": type,
             "attributes": list(attributes or []),
             "relationship_descriptions": relationship_descriptions or [],
         }

@@ -377,6 +377,7 @@ async def canonicalize_entities(
                             canonical_summary_RD_embedding=[], # needs to be filled in later in generate embeddings step.
                         )
     # save partial match info
+    # TODO SUBU this doesn't handle multigraph situations ....
     for raw_id, canonical_entity_map in raw_entity_to_canonical_entity_map.items():
         ce_ids = r_to_c_entity_map[raw_id]
         for (c_r_id, is_raw), llm_result in canonical_entity_map.items():

@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 async def run_graph_intelligence(
     id: str,
     title: str,
+    type: str,
     attributes: set[str] | None,
     relationship_descriptions: list[str],
     candidate_map: dict[str, dict[str, Any]],
@@ -42,6 +43,7 @@ async def run_graph_intelligence(
         llm,
         id,
         title,
+        type,
         attributes,
         relationship_descriptions,
         candidate_map,
@@ -53,7 +55,8 @@ async def run_graph_intelligence(
 async def run_canonicalize_entity(
     model: ChatModel,
     id: str,
-    title: str, 
+    title: str,
+    type: str,
     attributes: set[str] | None,
     relationship_descriptions: list[str],
     candidate_map: dict[str, dict[str, Any]],
@@ -76,6 +79,7 @@ async def run_canonicalize_entity(
     return await extractor(
         id=id,
         title=title,
+        type=type,
         attributes=attributes,
         relationship_descriptions=relationship_descriptions,
         candidate_map=candidate_map,
