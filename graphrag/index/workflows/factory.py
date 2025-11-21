@@ -53,6 +53,7 @@ _standard_workflows = [
     "create_base_text_units",
     "create_final_documents",
     "extract_graph",
+    "summarize_e_r",
     "finalize_graph",
     "extract_covariates",
     "create_communities",
@@ -64,11 +65,13 @@ _minimal_graph_workflows = [
     "create_base_text_units",
     "create_final_documents",
     "extract_graph",
+    "summarize_e_r",
     "finalize_graph",
     "extract_covariates",
     "create_final_text_units",
     # TODO SUBU: add generate_text_embeddings - depends on embed_text.names config not having community*. This is needed if we want to use DRIFT/Global/Local search.
 ]
+# TODO SUBU The fast / update paths haven't been looked at: Maybe just dump them for now.
 _fast_workflows = [
     "create_base_text_units",
     "create_final_documents",

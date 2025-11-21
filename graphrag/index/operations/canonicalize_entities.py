@@ -72,31 +72,26 @@ async def canonicalize_entities(
 
     - Identify
         - Vector similarity (should handle name similarities, synonyms, etc.) to existing canonical entities.
-        TODO Eventually improve this: See resolve_extracted_nodes in graphiti_core/utils/maintenance/node_operations.py
-        -
+        TODO Eventually improve this
+        - See resolve_extracted_nodes in graphiti_core/utils/maintenance/node_operations.py
         - by system knowledge (for proper nouns, we probably have an external source of truth that can be used to identify the entity). Using attributes and vectors
-        -
-        - by context (like type, current doc) / time / current trends. (We probably need vector search + summary)
         - Grounding using Google / LLM. (Ask LLM)
         
-    
-
-    - Identity Confidence.
+    - TODO Identity Confidence.
         - 1 if solidified for sure. A score between 0 and 1 if not sure.
         - If we have enough documents referencing this entity, we can be more confident. Page Rank?
         
-    - Organize Hierarchies as trees with special edges that cross RAW -> CANONICAL nodes.
+    - TODO Organize Hierarchies as trees with special edges that cross RAW -> CANONICAL nodes.
         - classify the entities into types of nouns (may need context if raw data is not sure)
         - For proper nouns, create a IDENTITY HIERARCHY (various ways of identification in graph). We probably want to link to system graphs here.
         -- Proper nouns will get canonical entities per unique identity. Two guys with same name but different linkedIn profiles should be different entities.
         - For common nouns create a VARIANT HIERARCHY. Include synonyms, plurals etc.
         -- Common nouns will get a single canonical entity encompassing all variants.
 
-    TODO 
-        - system attributes for canonical entities
-        - should we cluster raw entities by k-means (scikit)?
+    - TODO
         - graph maintenance jobs that continuously evaluate canonicalization / hierarchies etc.
         - evaluate pandarell - generally parallelize. This lib has asyncIO only for LLM stuff.
+        - drop the embedding columns from dataframes and just rely on vector stores: Today we use them to do k-means etc. but should be doable from vector store.
     """
 
     ticker = progress_ticker(
@@ -232,8 +227,8 @@ async def canonicalize_entities(
         return ce_id
 
     r_to_c_entity_map = {} # map of raw_id -> set(canonical_entity_ids)
-    # SINGLE THREADED NOW.
-    # first pass to create canonical entities
+
+    # create canonical entities
     for raw_id, canonical_entity_map in raw_entity_to_canonical_entity_map.items():
         # If there are exact matches to canonical entities with confidence 1.0, we add the raw entity to them.
         # If there are exact matches to prospects with confidence 1.0, we create new canonical entities for the prospects if necessary and add the raw entity to them.
@@ -265,7 +260,7 @@ async def canonicalize_entities(
 
         assert raw_id in r_to_c_entity_map, f"Raw entity {raw_id} does not have a canonical entity after the first pass."
 
-    # second pass to canonicalize relationships from raw - now we have CE setup for all RE.
+    # canonicalize relationships from raw - now that we have CE setup for all RE.
     # TODO SUBU Think about normalization(building known edge types) vs vector similarity matching (the current plan).
     for raw_id in r_to_c_entity_map.keys():
         for edge in r_graph.edges(raw_id, data=True):
@@ -293,6 +288,7 @@ async def canonicalize_entities(
                             canonical_summary=edge[2]["text_description"],
                             canonical_summary_RD_embedding=[], # needs to be filled in later in generate embeddings step.
                         )
+    
     # save partial match info
     # TODO SUBU this doesn't handle multigraph situations ....
     for raw_id, canonical_entity_map in raw_entity_to_canonical_entity_map.items():

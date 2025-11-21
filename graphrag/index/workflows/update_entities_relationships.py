@@ -15,7 +15,7 @@ from graphrag.index.typing.context import PipelineRunContext
 from graphrag.index.typing.workflow import WorkflowFunctionOutput
 from graphrag.index.update.entities import _group_and_resolve_entities
 from graphrag.index.update.relationships import _update_and_merge_relationships
-from graphrag.index.workflows.extract_graph import get_summarized_entities_relationships
+from graphrag.index.workflows.summarize_e_r import get_summarized_entities_relationships
 from graphrag.storage.pipeline_storage import PipelineStorage
 from graphrag.utils.storage import load_table_from_storage, write_table_to_storage
 

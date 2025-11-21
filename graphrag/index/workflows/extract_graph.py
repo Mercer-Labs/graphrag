@@ -19,15 +19,9 @@ from graphrag.config.enums import AsyncType
 from graphrag.config.get_embedding_settings import get_embedding_settings
 from graphrag.config.models.graph_rag_config import GraphRagConfig
 from graphrag.index.operations.canonicalize_entities import canonicalize_entities
-from graphrag.index.operations.canonicalize_relationships import (
-    canonicalize_relationships,
-)
 from graphrag.index.operations.embed_text.embed_text import embed_text
 from graphrag.index.operations.extract_graph.extract_graph import (
     extract_graph as extractor,
-)
-from graphrag.index.operations.summarize_descriptions.summarize_descriptions import (
-    summarize_descriptions,
 )
 from graphrag.index.typing.context import PipelineRunContext
 from graphrag.index.typing.workflow import WorkflowFunctionOutput
@@ -89,7 +83,7 @@ async def run_workflow(
         await write_table_to_storage(raw_entities.drop(columns=["title_SS_embedding"]), "raw_entities", context.output_storage)
         await write_table_to_storage(raw_relationships.drop(columns=["text_description_SS_embedding"]), "raw_relationships", context.output_storage)
 
-    entities, relationships = await process_raw_graph(
+    canonical_entities, canonical_relationships = await process_raw_graph(
         raw_entities=raw_entities,
         raw_relationships=raw_relationships,
         callbacks=context.callbacks,
@@ -101,15 +95,14 @@ async def run_workflow(
         config=config,
         context=context,
     )
-
-    await write_table_to_storage(entities, "entities", context.output_storage)
-    await write_table_to_storage(relationships, "relationships", context.output_storage)
+    await write_table_to_storage(canonical_entities.drop(columns=["title_SS_embedding", "title_RD_embedding", "summary_RD_embedding"]), "canonical_entities", context.output_storage)
+    await write_table_to_storage(canonical_relationships.drop(columns=["canonical_summary_RD_embedding"]), "canonical_relationships", context.output_storage)
 
     logger.info("Workflow completed: extract_graph")
     return WorkflowFunctionOutput(
         result={
-            "entities": entities,
-            "relationships": relationships,
+            "canonical_entities": canonical_entities,
+            "canonical_relationships": canonical_relationships,
         }
     )
 
@@ -208,20 +201,7 @@ async def process_raw_graph(
         cache=cache,
     )
     
-    if config.snapshots.canonical_graph:
-        await write_table_to_storage(canonical_entities.drop(columns=["title_SS_embedding", "title_RD_embedding", "summary_RD_embedding"]), "canonical_entities", context.output_storage)
-        await write_table_to_storage(canonical_relationships.drop(columns=["canonical_summary_RD_embedding"]), "canonical_relationships", context.output_storage)
-    
-    entities, relationships = await get_summarized_entities_relationships(
-        extracted_entities=canonical_entities,
-        extracted_relationships=canonical_relationships,
-        callbacks=callbacks,
-        cache=cache,
-        summarization_strategy=summarization_strategy,
-        summarization_num_threads=summarization_num_threads,
-    )
-
-    return (entities, relationships)
+    return (canonical_entities, canonical_relationships)
 
 async def canonicalize_graph(
     entities: pd.DataFrame,
@@ -244,34 +224,6 @@ async def canonicalize_graph(
         callbacks=callbacks,
         cache=cache,
     )
-
-
-async def get_summarized_entities_relationships(
-    extracted_entities: pd.DataFrame,
-    extracted_relationships: pd.DataFrame,
-    callbacks: WorkflowCallbacks,
-    cache: PipelineCache,
-    summarization_strategy: dict[str, Any] | None = None,
-    summarization_num_threads: int = 4,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Summarize the entities and relationships."""
-    entity_summaries, relationship_summaries = await summarize_descriptions(
-        entities_df=extracted_entities,
-        relationships_df=extracted_relationships,
-        callbacks=callbacks,
-        cache=cache,
-        strategy=summarization_strategy,
-        num_threads=summarization_num_threads,
-    )
-
-    # TODO SUBU - There are duplicate titles and source/targets: This causes a cartesian product explosion ... fix it.
-    relationships = extracted_relationships.drop(columns=["description"]).merge(
-        relationship_summaries, on=["source", "target"], how="left"
-    )
-
-    #extracted_entities.drop(columns=["attributes"], inplace=True)
-    entities = extracted_entities.merge(entity_summaries, on="title", how="left")
-    return entities, relationships
 
 
 def _validate_data(df: pd.DataFrame) -> bool:
