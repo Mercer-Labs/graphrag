@@ -189,6 +189,7 @@ async def canonicalize_entities(
                     id=row["id"],
                     is_raw=True,
                     title=row["title"],
+                    type=row["llm_inferred_type"],
                     attributes=raw_entity_node["attributes"],
                     relationships=[edge[2]["text_description"] for edge in r_graph.edges(row["id"], data=True)],
                 )
@@ -219,6 +220,7 @@ async def canonicalize_entities(
                     is_raw=False,
                     attributes=c_entity["attributes"],
                     title=c_entity["title"],
+                    type=c_entity["metadata"]["llm_inferred_type"],
                     relationships=relationships,
                 )
                 # TODO SUBU - add the related entities as well
@@ -297,6 +299,7 @@ async def canonicalize_entities(
             metadata={
                 "attributes": raw_entity_node["attributes"],
                 "node_type": SystemAttributes.CANONICAL,
+                "llm_inferred_type": raw_entity_node["llm_inferred_type"],
             },
             summary="", # summary is generated later.
             summary_RD_embedding=[],
@@ -318,9 +321,9 @@ async def canonicalize_entities(
     # SINGLE THREADED NOW.
     # first pass to create canonical entities
     for raw_id, canonical_entity_map in raw_entity_to_canonical_entity_map.items():
-        # If there are exact matches to canonical entities, we add the raw entity to them.
-        # If there are exact matches to prospects, we create new canonical entities for the prospects if necessary and add the raw entity to them.
-        # if there are partial / no matches, we create a new canonical entity for the raw entity.
+        # If there are exact matches to canonical entities with confidence 1.0, we add the raw entity to them.
+        # If there are exact matches to prospects with confidence 1.0, we create new canonical entities for the prospects if necessary and add the raw entity to them.
+        # if there are anything else, we create a new canonical entity for the raw entity.
         for (c_r_id, is_raw), llm_result in canonical_entity_map.items():
             if is_raw:
                 if c_r_id in r_to_c_entity_map:
@@ -331,7 +334,7 @@ async def canonicalize_entities(
             else:
                 c_ce_ids = {c_r_id}
 
-            if llm_result["match_type"] == MatchType.EXACT:
+            if llm_result["match_type"] == MatchType.EXACT and llm_result["confidence"] > 0.99:
                 # new HIERARCHY RELATIONSHIP from the raw entity - the set operations will ensure we don't add duplicates.
                 for ce_id in c_ce_ids:
                     ce_node = c_graph.nodes[ce_id]
@@ -385,33 +388,32 @@ async def canonicalize_entities(
                 c_ce_ids = r_to_c_entity_map[c_r_id]
             else:
                 c_ce_ids = {c_r_id}
-            if llm_result["match_type"] == MatchType.PARTIAL:
-                for ce_id in ce_ids:
-                    for c_ce_id in c_ce_ids:
-                        c_graph.add_edge(
-                            ce_id,
-                            c_ce_id,
-                            weight=1.0,
-                            metadata={
-                                "edge_type": SystemAttributes.CANONICAL,
-                                "relationship_type": RelationshipType.PARTIAL_MATCH,
-                                "confidence": llm_result["confidence"],
-                                "reasoning": llm_result["reasoning"],
-                            },
-                        )
-            elif llm_result["match_type"] == MatchType.NONE:
-                for ce_id in ce_ids:
-                    for c_ce_id in c_ce_ids:
-                        c_graph.add_edge(
-                            ce_id,
-                            c_ce_id,
-                            weight=1.0,
-                            metadata={
-                                "edge_type": SystemAttributes.CANONICAL,
-                                "relationship_type": RelationshipType.NO_MATCH,
-                                "reasoning": llm_result["reasoning"],
-                            },
-                        )
+
+            match llm_result["match_type"]:
+                case MatchType.PARTIAL:
+                    relationship_type = RelationshipType.PARTIAL_MATCH
+                case MatchType.EXACT:
+                    if llm_result["confidence"] < 1.0:
+                        relationship_type = RelationshipType.LOW_CONFIDENCE_EXACT_MATCH
+                    else:
+                        continue # relationship already added.
+                case MatchType.NONE:
+                    relationship_type = RelationshipType.NO_MATCH
+                case _:
+                    raise ValueError(f"Unknown match type: {llm_result['match_type']}")
+            for ce_id in ce_ids:
+                for c_ce_id in c_ce_ids:
+                    c_graph.add_edge(
+                        ce_id,
+                        c_ce_id,
+                        weight=1.0,
+                        metadata={
+                            "edge_type": SystemAttributes.CANONICAL,
+                            "relationship_type": relationship_type,
+                            "confidence": llm_result["confidence"],
+                            "reasoning": llm_result["reasoning"],
+                        },
+                    )
 
     canonical_entities = pd.DataFrame([
         ({"id": item[0], **(item[1] or {})})

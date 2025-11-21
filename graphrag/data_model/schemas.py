@@ -19,6 +19,7 @@ class SystemAttributes:
 
 class RelationshipType:
     RELATES_TO = "relates_to" # most common relationship type.
+    LOW_CONFIDENCE_EXACT_MATCH = "low_confidence_exact_match" # we have checked with LLM and got an exact match with low confidence.
     PARTIAL_MATCH = "partial_match" # we have checked with LLM and got a partial match.
     NO_MATCH = "no_match" # we have checked with LLM and got no match. These are two different entities.
 
