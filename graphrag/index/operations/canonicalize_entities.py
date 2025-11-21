@@ -3,6 +3,7 @@
 
 """All the steps to canonicalize the entities. We want to come out of this step with fully identified canonical entities for a given entity."""
 
+import asyncio
 import logging
 from typing import Any, Tuple
 
@@ -13,6 +14,7 @@ from sklearn.cluster import KMeans
 from uuid_utils import uuid7
 
 from graphrag.cache.pipeline_cache import PipelineCache
+from graphrag.callbacks.workflow_callbacks import WorkflowCallbacks
 from graphrag.config.embeddings import (
     canonical_entity_title_embedding,
     raw_entity_title_embedding,
@@ -27,6 +29,7 @@ from graphrag.index.operations.canonicalize_entity.typing import (
     MatchType,
 )
 from graphrag.index.operations.embed_text.embed_text import get_vector_store_for_write
+from graphrag.logger.progress import ProgressTicker, progress_ticker
 from graphrag.utils.api import get_vector_store_for_query
 from graphrag.vector_stores.base import BaseVectorStore, VectorStoreDocument
 
@@ -59,8 +62,9 @@ async def canonicalize_entities(
     known_relationships: pd.DataFrame,
     text_embed_config_strategy: dict,
     canonicalization_strategy: dict,
+    callbacks: WorkflowCallbacks,
     cache: PipelineCache,
-    num_threads: int = 4,
+    num_threads: int = 8,
     canonical_entities: pd.DataFrame | None = None, # "id", "title", "title_SS_embedding", "title_RD_embedding", "metadata", "summary", "summary_RD_embedding", "raw_entity_ids"
     canonical_relationships: pd.DataFrame | None = None, #"id", "source", "target", "metadata", "canonical_summary", "canonical_summary_RD_embedding"
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -95,6 +99,12 @@ async def canonicalize_entities(
         - evaluate pandarell - generally parallelize. This lib has asyncIO only for LLM stuff.
     """
 
+    ticker = progress_ticker(
+        callbacks.progress,
+        len(raw_entities),
+        description="Canonicalize entities cluster progress: ",
+    )
+
     # k-means cluster the raw entities. 
     # We want to organize by title similarity (graph partitioning doesn't work because raws probably have duplicates and island clusters)
     # TODO SUBU we assume there are num_threads clusters. In reality there may not be: Look at silhouette score/analysis to pick this number better.
@@ -102,6 +112,7 @@ async def canonicalize_entities(
     k_clusters = kmeans.fit(raw_entities["title_SS_embedding"].tolist()) # Probably a better way to do this...
     raw_entities["cluster"] = k_clusters.labels_
     raw_entity_cluster_dfs = {cluster: group for cluster, group in raw_entities.groupby("cluster")}
+
 
     # Temporarily we reconstruct the entire graph and manipulate the same - editing a dataframe is nuts. Eventually this should be a store.
     r_graph = nx.from_pandas_edgelist(
@@ -161,131 +172,34 @@ async def canonicalize_entities(
     # NOTE: This merging is what makes the representative raw-entity embeddings very useful for future canonicalization. It tries to bring the LLM intel to 
     # embedding vectors for name searches.
     #
-    # TODO SUBU PARALLELIZE the below.
-    # IMPORTANT: NX isn't threadsafe. - TODO SUBU handle it.
-    #  we maintain a list of the prospects instead of directly creating canonical entities here. Because without canonical edges, these are
-    #  not useful for context checks - will only confuse the LLM. We stash the entity holders for reuse.
-    new_c_entity_prospects: dict[str, CE_EntityHolder] = {}
-    raw_entity_map = {} # map of raw_id -> raw_entity
+    # NOTE: we maintain a list of the prospects instead of directly creating canonical entities here. Because without canonical edges, these are
+    #  not useful for context checks - will only confuse the LLM. We stash the entity holders for reuse. This also means we need three passes to process new raw entities:
+    #
+    # 1. First pass to create canonical entities for the raw entities Or identify existing ones that are good candidates. refine this to the min list.
+    # - This pass needs to track canonicalization prospective raw entities so that they can be a part of the candidate list for other raw entities. This is because of
+    # above reason where without edges, they are not useful for context checks. This pass is multi-threaded since we hit LLM.
+    # 2. Second pass to create the canonical entities. (remember their edges need to point to other canonical entities - so all nodes have to be created first)
+    # 3. Third pass to create canonical edges between the canonical entities.
+    #
     raw_entity_to_canonical_entity_map = {} # map of raw_id -> set(canonical_entity_ids)
+    cluster_futures = []
+    # running num_threads in parallel to canonicalize the entities.
     for cluster, cluster_df in raw_entity_cluster_dfs.items():
-        logger.debug(f"Processing cluster {cluster} with {len(cluster_df)} raw entities.")
-        # nx is not threadsafe.
-        for _, row in cluster_df.iterrows():
-            # -- start thread
-            logger.debug(f"Processing raw entity {row['id']} in cluster {cluster}.")
-            # We create the vector store one per thread because we want to set query filters for each thread.
-            r_entity_title_vs = get_vector_store_for_query(
-                vector_store_args={
-                    text_embed_config_strategy['embed_text_vector_store_id']: text_embed_config_strategy['vector_store'],
-                },
-                llm_config=text_embed_config_strategy['llm'],
-                embedding_name=raw_entity_title_embedding,
-            )
-            raw_entity_node = r_graph.nodes[row["id"]]
-            # TODO SUBU: Add the system relationships from documents / authors etc to help infer better? We can dig lot more using those 'known' 
-            # relationships. (Expand DFS to other nodes they have created that are like this one...)
-            raw_entity_holder = raw_entity_map[row["id"]] = CE_EntityHolder(
-                    id=row["id"],
-                    is_raw=True,
-                    title=row["title"],
-                    type=row["llm_inferred_type"],
-                    attributes=raw_entity_node["attributes"],
-                    relationships=[edge[2]["text_description"] for edge in r_graph.edges(row["id"], data=True)],
-                )
-            # find candidate canonical entities by vector search on canonical entities.
-            # NOTE this canonical DF gets updated as we go along. This will probably require special handling when we parallelize 
-            candidate_c_e_list = search_with_threshold(row["title_SS_embedding"], c_entity_title_vs, k=50)
-            if len(candidate_c_e_list) >= 50: # we don't expect to hit this
-                # essentially means we need to compact OR increase K OR rank better with summary etc.
-                logger.error(f"50! candidate canonical entities found for raw entity {row['id']}. There are probably more that are getting missed.")
-            # TODO SUBU Expand candidate selection with representative raw-entity embeddings.
-            # - TODO SUBU identity search in known identities.
-            # - vector search on known identities.
-            # - add candidates from other text unit chunks for example.
+        cluster_futures.append(canonicalize_entities_cluster(
+            cluster=cluster,
+            cluster_df=cluster_df,
+            r_graph=r_graph,
+            c_graph=c_graph,
+            c_entity_title_vs=c_entity_title_vs,
+            text_embed_config_strategy=text_embed_config_strategy,
+            canonicalization_strategy=canonicalization_strategy,
+            cache=cache,
+            ticker=ticker,
+        ))
 
-            # FIND candidates
-            # canonical OR TO-BE-CANONICAL nodes. Can contain duplicates.
-            chosen_canonical_entity_ids: dict[Tuple[str, bool], CE_EntityHolder] = {} # map of (id, is_raw) -> CE_EntityHolder
-            for ce in candidate_c_e_list:
-                c_entity = c_graph.nodes[ce.document.id]
-                # canonical nodes have relationships that have only summaries.
-                # we want to ensure we catch all possible variants to ensure the match is good. So we figure the source raw entities and their relationships.
-                relationships = []
-                for raw_source in c_entity["raw_entity_ids"]:
-                    relationships.extend([edge[2]["text_description"] for edge in r_graph.edges(raw_source, data=True)])
-                
-                chosen_canonical_entity_ids[(ce.document.id, False)] = CE_EntityHolder(
-                    id=ce.document.id,
-                    is_raw=False,
-                    attributes=c_entity["attributes"],
-                    title=c_entity["title"],
-                    type=c_entity["metadata"]["llm_inferred_type"],
-                    relationships=relationships,
-                )
-                # TODO SUBU - add the related entities as well
- 
-            # Search the new canonical entity prospects as well.
-            if new_c_entity_prospects: # Chroma query filter searches everything for empty filter.
-                r_entity_title_vs.filter_by_id(list(new_c_entity_prospects.keys()))
-                candidate_r_e_list = search_with_threshold(row["title_SS_embedding"], r_entity_title_vs, k=50)
-                if len(candidate_r_e_list) >= 50: # we don't expect to hit this in a single text unit
-                    raise ValueError(f"50! candidate raw entities found for raw entity {row['id']}. There are probably more that are getting missed.")
-                for re in candidate_r_e_list:
-                    chosen_canonical_entity_ids[(str(re.document.id), True)] = new_c_entity_prospects[str(re.document.id)]
-
-            if not chosen_canonical_entity_ids:
-                # upgrade row to canonical entity
-                # as time goes on, we expect this path to be rarer: We should know of all the canonical entities by now. TODO ADD METRIC
-                chosen_canonical_entity_ids[(row["id"], True)] = raw_entity_holder
-
-            # REFINE candidates
-            canonicalization_result = None
-            if len(chosen_canonical_entity_ids) == 1 and next(iter(chosen_canonical_entity_ids))[0] == row["id"] and next(iter(chosen_canonical_entity_ids))[1] == True:
-                # we have only one raw candidate: self. we just upgrade it.
-                canonicalization_result = CanonicalizationResult(
-                    id=row["id"],
-                    canonical_entities={(row["id"], True): {
-                        "entity": raw_entity_holder,
-                        "match_type": MatchType.EXACT,
-                        "confidence": 1.0,
-                        "reasoning": "Self-canonicalization",
-                    }},
-                )
-            else:
-                # handle canonical candidates, both new and existing: use context + LLM to refine to a smaller list OR even a new one.
-                #
-                # Right now this looks expensive: An LLM call per entity resolution. We will have to look at having smaller models and 
-                # node similarity algos for this.
-                # TODO SUBU NODE Similarlity is complicated because you want to map RAW->RAW connections on top of canonical->canonical connections and see if they are similar...
-                # - So it is not a simple graph similarity algo - it is more vector similarity of edge descriptions (which usually include both sides of the edge).
-                # - some are weighted higher (if there is a raw edge to a system entity - say the text mentions a profile url: This is huge compared to inferred edges)
-
-                # TODO SUBU - we are doing a simplistic comparison based on text description of links, so we stop at depth 1 DFS. In an ideal world, 
-                #  we will allow for target node details / summaries to be exactly sure. We will need enough links to 'WELL KNOWN' canonical entities to
-                #  be able to reason about this.
-                canonicalization_result = await canonicalize_entity(
-                    r_entity=raw_entity_holder,
-                    candidates=chosen_canonical_entity_ids,
-                    cache=cache,
-                    strategy=canonicalization_strategy,
-                )
-            found_exact_match = False
-            # we get either
-            # - exact match to an existing canonical entity(or prospect)
-            # - partial match to an existing canonical entity(or prospect)
-            # - no match to any canonical entity(or prospect)
-            for k, v in canonicalization_result.canonical_entities.items():
-                if k[1] == True: # any raw entity candidate is a prospect
-                    new_c_entity_prospects[k[0]] = v["entity"]
-                if v["match_type"] == MatchType.EXACT:
-                    found_exact_match = True
-            if not found_exact_match: # only partial or none. Upgrade current entity.
-                new_c_entity_prospects[row["id"]] = raw_entity_holder
-
-            raw_entity_to_canonical_entity_map[row["id"]] = canonicalization_result.canonical_entities
-            # -- end thread
-
+    cluster_results = await asyncio.gather(*cluster_futures)
+    for cluster_result in cluster_results:
+        raw_entity_to_canonical_entity_map.update(cluster_result)
 
     # UPDATE system - create canonical entities and relationships (AFTER processing: outside the thread)
     def add_canonical_entity_node_for_raw_entity(raw_id: str) -> str:
@@ -433,6 +347,131 @@ async def canonicalize_entities(
 
 
 
+async def canonicalize_entities_cluster(
+    cluster: int,
+    cluster_df: pd.DataFrame,
+    r_graph: nx.MultiGraph,
+    c_graph: nx.Graph,
+    c_entity_title_vs: BaseVectorStore,
+    text_embed_config_strategy: dict,
+    canonicalization_strategy: dict,
+    cache: PipelineCache,
+    ticker: ProgressTicker,
+) -> dict[str, set[str]]:
+    """Canonicalize entities for a set of raw entities clustered using KMeans split: Making them semantically similar."""
+    logger.debug(f"Processing cluster {cluster} with {len(cluster_df)} raw entities.")
+    new_c_entity_prospects_thr: dict[str, CE_EntityHolder] = {}
+    raw_entity_to_canonical_entity_map_thr = {} # map of raw_id -> set(canonical_entity_ids)
+    for _, row in cluster_df.iterrows():
+        # We create the vector store one per thread because we want to set query filters for each thread.
+        r_entity_title_vs = get_vector_store_for_query(
+            vector_store_args={
+                text_embed_config_strategy['embed_text_vector_store_id']: text_embed_config_strategy['vector_store'],
+            },
+            llm_config=text_embed_config_strategy['llm'],
+            embedding_name=raw_entity_title_embedding,
+        )
+        raw_entity_node = r_graph.nodes[row["id"]]
+        # TODO SUBU: Add the system relationships from documents / authors etc to help infer better? We can dig lot more using those 'known' 
+        # relationships. (Expand DFS to other nodes they have created that are like this one...)
+        raw_entity_holder = CE_EntityHolder(
+                id=row["id"],
+                is_raw=True,
+                title=row["title"],
+                type=row["llm_inferred_type"],
+                attributes=raw_entity_node["attributes"],
+                relationships=[edge[2]["text_description"] for edge in r_graph.edges(row["id"], data=True)],
+            )
+        # find candidate canonical entities by vector search on canonical entities.
+        # NOTE this canonical DF gets updated as we go along. This will probably require special handling when we parallelize 
+        candidate_c_e_list = search_with_threshold(row["title_SS_embedding"], c_entity_title_vs, k=50)
+        if len(candidate_c_e_list) >= 50: # we don't expect to hit this
+            # essentially means we need to compact OR increase K OR rank better with summary etc.
+            logger.error(f"50! candidate canonical entities found for raw entity {row['id']}. There are probably more that are getting missed.")
+        # TODO SUBU Expand candidate selection with representative raw-entity embeddings.
+        # - TODO SUBU identity search in known identities.
+        # - vector search on known identities.
+        # - add candidates from other text unit chunks for example.
 
+        # FIND candidates
+        # canonical OR TO-BE-CANONICAL nodes. Can contain duplicates.
+        chosen_canonical_entity_ids: dict[Tuple[str, bool], CE_EntityHolder] = {} # map of (id, is_raw) -> CE_EntityHolder
+        for ce in candidate_c_e_list:
+            c_entity = c_graph.nodes[ce.document.id]
+            # canonical nodes have relationships that have only summaries.
+            # we want to ensure we catch all possible variants to ensure the match is good. So we figure the source raw entities and their relationships.
+            relationships = []
+            for raw_source in c_entity["raw_entity_ids"]:
+                relationships.extend([edge[2]["text_description"] for edge in r_graph.edges(raw_source, data=True)])
+            
+            chosen_canonical_entity_ids[(ce.document.id, False)] = CE_EntityHolder(
+                id=ce.document.id,
+                is_raw=False,
+                attributes=c_entity["attributes"],
+                title=c_entity["title"],
+                type=c_entity["metadata"]["llm_inferred_type"],
+                relationships=relationships,
+            )
+            # TODO SUBU - add the related entities as well
 
+        # Search the new canonical entity prospects as well.
+        if new_c_entity_prospects_thr: # Chroma query filter searches everything for empty filter.
+            r_entity_title_vs.filter_by_id(list(new_c_entity_prospects_thr.keys()))
+            candidate_r_e_list = search_with_threshold(row["title_SS_embedding"], r_entity_title_vs, k=50)
+            if len(candidate_r_e_list) >= 50: # we don't expect to hit this in a single text unit
+                raise ValueError(f"50! candidate raw entities found for raw entity {row['id']}. There are probably more that are getting missed.")
+            for re in candidate_r_e_list:
+                chosen_canonical_entity_ids[(str(re.document.id), True)] = new_c_entity_prospects_thr[str(re.document.id)]
 
+        if not chosen_canonical_entity_ids:
+            # upgrade row to canonical entity
+            # as time goes on, we expect this path to be rarer: We should know of all the canonical entities by now. TODO ADD METRIC
+            chosen_canonical_entity_ids[(row["id"], True)] = raw_entity_holder
+
+        # REFINE candidates
+        canonicalization_result = None
+        if len(chosen_canonical_entity_ids) == 1 and next(iter(chosen_canonical_entity_ids))[0] == row["id"] and next(iter(chosen_canonical_entity_ids))[1] == True:
+            # we have only one raw candidate: self. we just upgrade it.
+            canonicalization_result = CanonicalizationResult(
+                id=row["id"],
+                canonical_entities={(row["id"], True): {
+                    "entity": raw_entity_holder,
+                    "match_type": MatchType.EXACT,
+                    "confidence": 1.0,
+                    "reasoning": "Self-canonicalization",
+                }},
+            )
+        else:
+            # handle canonical candidates, both new and existing: use context + LLM to refine to a smaller list OR even a new one.
+            #
+            # Right now this looks expensive: An LLM call per entity resolution. We will have to look at having smaller models and 
+            # node similarity algos for this.
+            # TODO SUBU NODE Similarlity is complicated because you want to map RAW->RAW connections on top of canonical->canonical connections and see if they are similar...
+            # - So it is not a simple graph similarity algo - it is more vector similarity of edge descriptions (which usually include both sides of the edge).
+            # - some are weighted higher (if there is a raw edge to a system entity - say the text mentions a profile url: This is huge compared to inferred edges)
+
+            # TODO SUBU - we are doing a simplistic comparison based on text description of links, so we stop at depth 1 DFS. In an ideal world, 
+            #  we will allow for target node details / summaries to be exactly sure. We will need enough links to 'WELL KNOWN' canonical entities to
+            #  be able to reason about this.
+            canonicalization_result = await canonicalize_entity(
+                r_entity=raw_entity_holder,
+                candidates=chosen_canonical_entity_ids,
+                cache=cache,
+                strategy=canonicalization_strategy,
+            )
+        found_exact_match = False
+        # we get either
+        # - exact match to an existing canonical entity(or prospect)
+        # - partial match to an existing canonical entity(or prospect)
+        # - no match to any canonical entity(or prospect)
+        for k, v in canonicalization_result.canonical_entities.items():
+            if k[1] == True: # any raw entity candidate is a prospect
+                new_c_entity_prospects_thr[k[0]] = v["entity"]
+            if v["match_type"] == MatchType.EXACT:
+                found_exact_match = True
+        if not found_exact_match: # only partial or none. Upgrade current entity.
+            new_c_entity_prospects_thr[row["id"]] = raw_entity_holder
+
+        raw_entity_to_canonical_entity_map_thr[row["id"]] = canonicalization_result.canonical_entities
+        ticker(1)
+    return raw_entity_to_canonical_entity_map_thr

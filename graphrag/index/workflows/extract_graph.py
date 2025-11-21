@@ -204,6 +204,7 @@ async def process_raw_graph(
         relationships=raw_relationships,
         text_embed_config_strategy=text_embed_config_strategy,
         canonicalize_entity_strategy=canonicalize_entity_strategy,
+        callbacks=callbacks,
         cache=cache,
     )
     
@@ -227,6 +228,7 @@ async def canonicalize_graph(
     relationships: pd.DataFrame,
     text_embed_config_strategy: dict,
     canonicalize_entity_strategy: dict,
+    callbacks: WorkflowCallbacks,
     cache: PipelineCache,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
@@ -239,6 +241,7 @@ async def canonicalize_graph(
         known_relationships=pd.DataFrame(), 
         text_embed_config_strategy=text_embed_config_strategy,
         canonicalization_strategy=canonicalize_entity_strategy,
+        callbacks=callbacks,
         cache=cache,
     )
 
