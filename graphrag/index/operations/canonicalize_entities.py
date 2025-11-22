@@ -66,7 +66,7 @@ async def canonicalize_entities(
     cache: PipelineCache,
     num_threads: int = 8,
     canonical_entities: pd.DataFrame | None = None, # "id", "title", "title_SS_embedding", "title_RD_embedding", "metadata", "summary", "summary_RD_embedding", "raw_entity_ids"
-    canonical_relationships: pd.DataFrame | None = None, #"id", "source", "target", "metadata", "canonical_summary", "canonical_summary_RD_embedding"
+    canonical_relationships: pd.DataFrame | None = None, #"id", "source", "target", "metadata", "canonical_summary", "canonical_summary_RD_embedding", "raw_edge_ids"
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """All the steps to identify entities.
 
@@ -263,29 +263,31 @@ async def canonicalize_entities(
     # canonicalize relationships from raw - now that we have CE setup for all RE.
     # TODO SUBU Think about normalization(building known edge types) vs vector similarity matching (the current plan).
     for raw_id in r_to_c_entity_map.keys():
-        for edge in r_graph.edges(raw_id, data=True):
-            source_ce_ids = r_to_c_entity_map[edge[0]]
-            target_ce_ids = r_to_c_entity_map[edge[1]]
+        for (u, v, key, data) in r_graph.edges(raw_id, keys=True, data=True):
+            source_ce_ids = r_to_c_entity_map[u]
+            target_ce_ids = r_to_c_entity_map[v]
             # do the cartesian connection for all source and target canonical entities.
             # This seems weird - but will force the later node merges to happen.
             for source_ce_id in source_ce_ids:
                 for target_ce_id in target_ce_ids:
-                    if c_graph.has_edge(source_ce_id, target_ce_id):
+                    if c_graph.has_edge(source_ce_id, target_ce_id) and key not in c_graph.edges[source_ce_id, target_ce_id]["raw_edge_ids"]:
                         c_graph.edges[source_ce_id, target_ce_id]["metadata"]["canonical_summary_pending"] = True 
-                        c_graph.edges[source_ce_id, target_ce_id]["weight"] += edge[2]["weight"]
-                        c_graph.edges[source_ce_id, target_ce_id]["canonical_summary"] = "\n".join([c_graph.edges[source_ce_id, target_ce_id]["canonical_summary"], edge[2]["text_description"]])
+                        c_graph.edges[source_ce_id, target_ce_id]["weight"] += data["weight"]
+                        c_graph.edges[source_ce_id, target_ce_id]["canonical_summary"] = "\n".join([c_graph.edges[source_ce_id, target_ce_id]["canonical_summary"], data["text_description"]])
+                        c_graph.edges[source_ce_id, target_ce_id]["raw_edge_ids"] += [key]
                     else:
                         c_graph.add_edge(
                             source_ce_id,
                             target_ce_id,
-                            weight=edge[2]["weight"],
+                            weight=data["weight"],
                             metadata={
                                 "edge_type": SystemAttributes.CANONICAL,
                                 "relationship_type": RelationshipType.RELATES_TO,
                                 "canonical_summary_pending": True,
                                 "last_summary_timestamp": 0,
                             },
-                            canonical_summary=edge[2]["text_description"],
+                            canonical_summary=data["text_description"],
+                            raw_edge_ids=[key],
                             canonical_summary_RD_embedding=[], # needs to be filled in later in generate embeddings step.
                         )
     
