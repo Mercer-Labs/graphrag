@@ -123,6 +123,7 @@ def _get_parameters(
         "user",
         "dimensions",
         "encoding_format",
+        "task_type",
     ]
     parameters.update({key: kwargs.get(key) for key in keys_to_cache if key in kwargs})
 
