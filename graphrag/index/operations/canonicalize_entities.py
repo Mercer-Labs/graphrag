@@ -282,7 +282,7 @@ async def canonicalize_entities(
                             weight=data["weight"],
                             metadata={
                                 "edge_type": SystemAttributes.CANONICAL,
-                                "relationship_type": RelationshipType.RELATES_TO,
+                                "relationship_type": RelationshipType.EXACT_MATCH,
                                 "canonical_summary_pending": True,
                                 "last_summary_timestamp": 0,
                             },

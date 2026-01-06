@@ -79,7 +79,7 @@ async def run_extract_graph(
 
     for _, _, edge in graph.edges(data=True):  # type: ignore
         if edge is not None:
-            edge["source_id"] = doc.id
+            edge["source_id"] = doc.id # we can use this to map back to the graph for the given document.
             edge["edge_type"] = SystemAttributes.RAW
 
     entities = [

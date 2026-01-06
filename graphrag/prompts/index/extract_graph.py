@@ -7,6 +7,10 @@ GRAPH_EXTRACTION_PROMPT = """
 <Goal>
 Given a text document of type {document_type}, identify all nouns and concepts as entities. Capture their name, attributes and their types from the text. Also extract relationships among the identified entities.
 </Goal>
+<Rules>
+- Don't decode known types of entities like Phone numbers,URLs, email addresses etc: Treat them as entities with corresponding types.
+- Treat self references like me, my, we, us, etc. as entities with types like SELF_PERSON_REFERENCE, SELF_ORG_REFERENCE etc.
+</Rules>
 <Steps>
 <Step id="1">
 Identify all nouns and concepts entities. For each identified entity, extract the following information:
@@ -17,7 +21,7 @@ Identify all nouns and concepts entities. For each identified entity, extract th
 - is_proper_noun: Is this entity referring to a specific person, place, or thing? If unsure, set to False.
 </Step>
 <Step id="2">
-From the entities identified in step 1, identify all pairs of (source entity, target entity) that are *clearly related* to each other. The relationships are bidirectional.
+From the entities identified in step 1, identify all pairs of (source entity, target entity) that are *clearly related* to each other.
 For each pair of related entities, extract the following information:
 - source: id of the source entity, as identified in step 1
 - target: id of the target entity, as identified in step 1
